@@ -1,0 +1,169 @@
+# 三公九卿（简化版）制度定义
+# 第一套制度：3公 + 4部 = 7个岗位
+# 加载器: institution.load_institution()
+
+institution:
+  id: sanguan-jiuqing
+  name: 三公九卿（简化）
+  version: 1.0.0
+  description: 简化版三公九卿。三公完整还原（丞相/太尉/御史大夫），九卿合并为四个执行岗。
+
+  # ── 岗位定义 ──────────────────────────────────────────
+  posts:
+    # 三公
+    - id: chancery            # 丞相
+      title: 丞相
+      role: coordinator       # 总协调：拆解/分派/汇总/催办
+      reports_to: emperor     # 直接对接皇帝
+      tool_allowance:
+        - decompose_task      # 拆解上谕为子任务
+        - dispatch_task       # 分派任务给执行岗
+        - inquire_progress    # 催办
+        - summarize           # 汇总结果上奏
+        - query_events        # 查事件流（了解全局）
+      model: pro              # 丞相用 pro 模型（发布前 flash 顶替）
+
+    - id: grand_commandant    # 太尉
+      title: 太尉
+      role: external          # 对外联络/社交
+      reports_to: chancery    # 汇报给丞相（间接对皇帝）
+      tool_allowance:
+        - compose_message     # 起草对外消息
+        - run_task            # 执行具体事务
+        - query_events
+
+    - id: censor              # 御史大夫
+      title: 御史大夫
+      role: inspector         # 监察主审
+      reports_to: emperor     # 特权直奏皇帝
+      tool_allowance:
+        - query_events        # 查审计流水
+        - review_logs         # 审查日志
+        - draft_impeachment   # 起草弹劾奏章
+        - issue_warning       # 留任警告（自决）
+        - recommend_removal   # 建议革职（需朱批）
+      model: pro              # 主审也用 pro（判断质量关键）
+
+    - id: censor_assistant    # 御史（助手）
+      title: 御史
+      role: inspector_assistant
+      reports_to: censor      # 向御史大夫汇报
+      tool_allowance:
+        - query_events
+        - review_logs
+        - gather_evidence     # 汇总证据
+
+    # 四部（九卿合并）
+    - id: finance             # 治粟内史 + 少府
+      title: 治粟内史
+      role: executor
+      reports_to: chancery
+      tool_allowance:
+        - run_task            # 执行任务
+        - query_events
+        - report_result       # 呈报结果给丞相
+
+    - id: justice             # 廷尉
+      title: 廷尉
+      role: executor
+      reports_to: chancery
+      tool_allowance:
+        - run_task
+        - review_output       # 质检复核
+        - query_events
+        - report_result
+
+    - id: relations           # 典客 + 宗正
+      title: 典客
+      role: executor
+      reports_to: chancery
+      tool_allowance:
+        - run_task
+        - compose_message
+        - query_events
+        - report_result
+
+    - id: internal            # 郎中令 + 卫尉 + 太仆 + 奉常
+      title: 郎中令
+      role: executor
+      reports_to: chancery
+      tool_allowance:
+        - run_task
+        - query_events
+        - report_result
+
+  # ── 通信协议（白名单）──────────────────────────────────
+  communication_rules:
+    # 皇帝 → 丞相：上谕
+    - from: emperor
+      to: chancery
+      type: [edict]
+
+    # 皇帝 → 御史大夫：弹劾裁决
+    - from: emperor
+      to: censor
+      type: [verdict]
+
+    # 皇帝 → 各执行岗：任命/革职通知（初版经丞相转达）
+    - from: emperor
+      to: chancery
+      type: [appointment]
+
+    # 丞相 → 执行岗：任务分派/催办/修正
+    - from: chancery
+      to: [finance, justice, relations, internal, grand_commandant]
+      type: [task_assignment, inquiry, correction]
+
+    # 丞相 → 皇帝：汇总奏折
+    - from: chancery
+      to: emperor
+      type: [memorial]
+
+    # 执行岗 → 丞相：结果/报告
+    - from: [finance, justice, relations, internal, grand_commandant]
+      to: chancery
+      type: [report, result]
+
+    # 御史大夫 → 皇帝：特权直奏（弹劾/主动奏报）
+    - from: censor
+      to: emperor
+      type: [impeachment, memorial]
+
+    # 御史助手 → 御史大夫：调查简报
+    - from: censor_assistant
+      to: censor
+      type: [investigation_brief, evidence]
+
+    # 御史大夫 → 御史助手：调查指令
+    - from: censor
+      to: censor_assistant
+      type: [investigate]
+
+    # 任何岗位 → 御史大夫：违制记录（总线自动产生）
+    - from: system
+      to: censor
+      type: [violation_record]
+
+  # ── 奏折状态机（全局）─────────────────────────────────
+  memorial_state_machine:
+    states: [submitted, read, approved, rejected, held, returned, archived]
+    transitions:
+      submitted: [read]
+      read: [approved, rejected, held, returned]
+      approved: [archived]
+      rejected: [archived]     # 驳回：打回丞相重新分派
+      held: [read]             # 留中：可再阅
+      returned: [read]         # 发回重办：打回丞相
+      archived: []
+
+  # ── 皇帝界面展示配置 ──────────────────────────────────
+  emperor_ui:
+    posts_display:
+      - { id: chancery, title: 丞相, group: 三公 }
+      - { id: grand_commandant, title: 太尉, group: 三公 }
+      - { id: censor, title: 御史大夫, group: 三公 }
+      - { id: finance, title: 治粟内史, group: 四部 }
+      - { id: justice, title: 廷尉, group: 四部 }
+      - { id: relations, title: 典客, group: 四部 }
+      - { id: internal, title: 郎中令, group: 四部 }
+    memorial_verdicts: [approved, rejected, held, returned]  # 皇帝可批的选项
