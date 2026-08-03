@@ -5,6 +5,7 @@ Pydantic request models keep the API contract explicit (kimi-friendly).
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -149,9 +150,29 @@ async def impeachment_verdict(imp_id: str, body: ImpeachmentVerdictIn) -> dict[s
 
 
 # ── posts (官职墙) ─────────────────────────────────────────
+def _post_with_persona(row: dict[str, Any]) -> dict[str, Any]:
+    """Decode the persona JSON column for the frontend."""
+    row = dict(row)
+    persona = row.get("persona")
+    try:
+        row["persona"] = json.loads(persona) if persona else None
+    except (json.JSONDecodeError, TypeError):
+        row["persona"] = None
+    return row
+
+
 @router.get("/posts")
 def list_posts() -> list[dict[str, Any]]:
-    return _ctx().appointments.list_posts(institution_id=_ctx().institution.id)
+    rows = _ctx().appointments.list_posts(institution_id=_ctx().institution.id)
+    return [_post_with_persona(r) for r in rows]
+
+
+@router.get("/posts/{post_id}")
+def get_post(post_id: str) -> dict[str, Any]:
+    row = _ctx().appointments.get_post(post_id)
+    if row is None:
+        raise HTTPException(404, "post not found")
+    return _post_with_persona(row)
 
 
 @router.post("/posts/{post_id}/appoint")
@@ -162,7 +183,7 @@ async def appoint(post_id: str, body: AppointIn) -> dict[str, Any]:
     except Exception as e:  # AppointmentError
         raise HTTPException(400, str(e)) from e
     await _bc().broadcast("post_status", row)
-    return row
+    return _post_with_persona(row)
 
 
 # ── events ─────────────────────────────────────────────────

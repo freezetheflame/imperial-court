@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS posts (
   status TEXT DEFAULT 'active',
   model TEXT,
   current_agent TEXT,
+  persona TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -118,11 +119,23 @@ class Storage:
             row = conn.execute("SELECT version FROM schema_version").fetchone()
             if row is None:
                 conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
-            elif row["version"] < SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"schema too old: {row['version']} < {SCHEMA_VERSION}; migration not implemented yet"
-                )
+            else:
+                version = row["version"]
+                if version < SCHEMA_VERSION:
+                    self._apply_migrations(conn, version)
+                    conn.execute(
+                        "UPDATE schema_version SET version = ?", (SCHEMA_VERSION,)
+                    )
         self._first_run = first_run
+
+    @staticmethod
+    def _apply_migrations(conn: sqlite3.Connection, from_version: int) -> None:
+        """Stepwise migrations from `from_version` to SCHEMA_VERSION."""
+        if from_version < 3:
+            # v2 → v3: posts gained the persona column (JSON agent portrait)
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(posts)")}
+            if "persona" not in cols:
+                conn.execute("ALTER TABLE posts ADD COLUMN persona TEXT")
 
     # ── generic ─────────────────────────────────────────────
     def execute(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Cursor:

@@ -15,6 +15,7 @@ from typing import Any
 
 from imperial.agent.llm_client import LLMClient, LLMError
 from imperial.agent.loop import AgentLoop
+from imperial.agent.persona import PersonaService
 from imperial.agent.scheduler import AgentScheduler
 from imperial.agent.tools import build_tools
 from imperial.agent.tracker import TaskTracker
@@ -64,6 +65,7 @@ class AppContext:
     edicts: EdictService
     tools: Any
     tracker: TaskTracker
+    personas: PersonaService
     scheduler: AgentScheduler | None = None
 
     def make_loop(self, llm: LLMClient | None = None) -> AgentLoop:
@@ -74,6 +76,12 @@ class AppContext:
             llm=llm,  # type: ignore[arg-type]
             engine=self.engine,
         )
+
+    def ensure_personas(self, force: bool = False) -> None:
+        """Generate personas for offices that lack one (lazy, idempotent)."""
+        for p in self.institution.posts:
+            if force or self.personas.load(p.id) is None:
+                self.personas.save(p.id, self.personas.generate(self.institution, p.id))
 
 
 def build_context(
@@ -87,7 +95,11 @@ def build_context(
     institution = load_institution(institution_path or DEFAULT_INSTITUTION)
     engine = RuleEngine(institution)
     bus = Bus(institution, storage, engine)
-    appointments = AppointmentService(storage)
+    personas = PersonaService(storage, llm=_make_llm() if _llm_available() else None)
+    appointments = AppointmentService(
+        storage,
+        persona_regenerator=lambda post_id: personas.generate(institution, post_id),
+    )
     memorials = MemorialService(storage, bus, institution, engine)
     impeachments = ImpeachmentService(storage, bus, appointments)
     edicts = EdictService(storage, bus)
@@ -126,7 +138,8 @@ def build_context(
     return AppContext(
         storage=storage, institution=institution, engine=engine, bus=bus,
         appointments=appointments, memorials=memorials, impeachments=impeachments,
-        edicts=edicts, tools=tools, tracker=tracker, scheduler=scheduler,
+        edicts=edicts, tools=tools, tracker=tracker, personas=personas,
+        scheduler=scheduler,
     )
 
 

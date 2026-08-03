@@ -26,12 +26,16 @@ def test_persists_across_instances(tmp_db):
     assert row is not None and row["version"] == SCHEMA_VERSION
 
 
-def test_missing_schema_migration_raises(tmp_db):
-    # simulate an older schema (version 0) → migration not implemented → error
+def test_old_schema_migrates_to_v3(tmp_db):
+    # simulate an older schema (version 0, no persona column) → migration adds it
     s = Storage(tmp_db)
     s.execute("UPDATE schema_version SET version = 0")
-    with pytest.raises(RuntimeError, match="schema too old"):
-        Storage(tmp_db)
+    s.execute("ALTER TABLE posts DROP COLUMN persona")  # back to v2 shape
+    s2 = Storage(tmp_db)  # reopen → migrates 0 → SCHEMA_VERSION
+    row = s2.query_one("SELECT version FROM schema_version")
+    assert row is not None and row["version"] == SCHEMA_VERSION
+    cols = {r["name"] for r in s2.query("PRAGMA table_info(posts)")}
+    assert "persona" in cols  # v3 migration added the persona column
 
 
 def test_insert_and_query_events(storage):

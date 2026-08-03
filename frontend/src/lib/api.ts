@@ -58,6 +58,13 @@ export interface Post {
   status: string;
   model?: string | null;
   current_agent?: string | null;
+  persona?: {
+    name: string;
+    courtesy: string;
+    temperament: string;
+    style: string;
+    origin: string;
+  } | null;
 }
 
 export interface EventRecord {

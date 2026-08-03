@@ -6,6 +6,7 @@ Warnings are recorded and leave the post untouched.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from imperial.storage import Storage
@@ -16,15 +17,16 @@ class AppointmentError(RuntimeError):
 
 
 class AppointmentService:
-    def __init__(self, storage: Storage):
+    def __init__(self, storage: Storage, persona_regenerator: Any | None = None):
         self.storage = storage
+        self.persona_regenerator = persona_regenerator  # callable(post_id) → persona dict
 
     # ── actions ────────────────────────────────────────────
     def remove(self, post_id: str, *, reason: str, impeachment_id: str | None = None) -> dict[str, Any]:
         """革职 — post becomes vacant, its agent is dismissed."""
         post = self._get_post(post_id)
         self.storage.execute(
-            "UPDATE posts SET status = 'vacant', current_agent = NULL WHERE id = ?",
+            "UPDATE posts SET status = 'vacant', current_agent = NULL, persona = NULL WHERE id = ?",
             (post_id,),
         )
         self._record("remove", post_id, reason=reason, impeachment_id=impeachment_id, agent=post.get("current_agent"))
@@ -34,9 +36,16 @@ class AppointmentService:
         """任命 — fill a vacant post (or replace the current agent)."""
         self._get_post(post_id)  # raises if unknown
         self.storage.execute(
-            "UPDATE posts SET status = 'active', current_agent = ? WHERE id = ?",
+            "UPDATE posts SET status = 'active', current_agent = ?, persona = NULL WHERE id = ?",
             (agent, post_id),
         )
+        # a new person takes the office → regenerate the persona
+        if self.persona_regenerator is not None:
+            persona = self.persona_regenerator(post_id)
+            self.storage.execute(
+                "UPDATE posts SET persona = ? WHERE id = ?",
+                (json.dumps(persona, ensure_ascii=False), post_id),
+            )
         self._record("appoint", post_id, reason=reason, agent=agent)
         return self._get_post(post_id)  # type: ignore[return-value]
 

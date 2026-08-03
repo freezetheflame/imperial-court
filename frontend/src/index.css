@@ -175,3 +175,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 li.done .subtask-mark { color: #7ecba1; }
 .subtask-target { margin-left: auto; color: #967d5c; font-size: .68rem; }
 @media (max-width: 700px) { .hall-progress-slot { right: 4%; top: 14%; width: 42%; } }
+
+/* ── 人格画像卡片 ─────────────────────────────────── */
+.plaque-summary em.plaque-person { display: block; font-style: normal; color: #c9a45a; font-size: .82rem; margin-top: 3px; }
+.plaque-summary em.plaque-person small { color: #967d5c; margin-left: 6px; font-size: .68rem; }
+.persona-card { border-top: 1px dashed #a3845355; padding-top: 10px; margin-top: 2px; }
+.persona-name { color: #f5e2b8; font-size: 1.1rem; letter-spacing: .12em; margin-bottom: 8px; }
+.persona-name span { color: #a67c00; font-size: .75rem; margin-left: 8px; }
+.persona-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+.persona-card dt { color: #a67c00; font-size: .72rem; }
+.persona-card dd { margin: 0; color: #e8d29d; font-size: .8rem; line-height: 1.6; }
