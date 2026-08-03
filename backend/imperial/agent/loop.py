@@ -96,7 +96,6 @@ class AgentLoop:
 
         tool_calls: list[ToolCallRecord] = []
         post = self.institution.post(post_id)
-
         for _ in range(self.max_turns):
             resp: LLMResponse = self.llm.complete(messages, self.tools.schemas(), model=post.model)
             if not resp.tool_calls:
@@ -131,7 +130,7 @@ class AgentLoop:
                     continue
 
                 try:
-                    result = await self.tools.execute(tc.name, tc.arguments)
+                    result = await self.tools.execute(tc.name, tc.arguments, _post_id=post_id)
                     record = ToolCallRecord(tc.name, tc.arguments, True, "allowed", result)
                 except Exception as e:  # noqa: BLE001 — tool errors are data for the LLM
                     record = ToolCallRecord(tc.name, tc.arguments, True, "allowed", {"error": str(e)})

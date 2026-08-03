@@ -29,6 +29,8 @@ def test_reports_to_chain(institution):
 def test_can_send_whitelist(institution):
     # emperor → chancery edict: allowed
     assert institution.can_send("emperor", "chancery", "edict")
+    # emperor → chancery correction (verdict re-plan): allowed
+    assert institution.can_send("emperor", "chancery", "correction")
     # censor → emperor impeachment (privileged direct report): allowed
     assert institution.can_send("censor", "emperor", "impeachment")
     # finance → emperor directly: NOT allowed (must go through chancery)

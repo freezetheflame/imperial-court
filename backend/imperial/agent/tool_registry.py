@@ -75,8 +75,14 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self._tools.values()]
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> Any:
+    async def execute(self, name: str, arguments: dict[str, Any], **injected: Any) -> Any:
+        """Execute a tool. `injected` kwargs are only passed if the tool
+        function declares them (e.g. _post_id from AgentLoop)."""
         spec = self._tools[name]
+        kwargs = dict(arguments)
+        for key, val in injected.items():
+            if key in inspect.signature(spec.fn).parameters:
+                kwargs[key] = val
         if spec.async_fn:
-            return await spec.fn(**arguments)
-        return spec.fn(**arguments)
+            return await spec.fn(**kwargs)
+        return spec.fn(**kwargs)

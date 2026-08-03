@@ -97,7 +97,7 @@ institution:
     # 皇帝 → 丞相：上谕
     - from: emperor
       to: chancery
-      type: [edict]
+      type: [edict, correction]
 
     # 皇帝 → 御史大夫：弹劾裁决
     - from: emperor
