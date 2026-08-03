@@ -1,8 +1,16 @@
 pyproject.toml
 imperial/__init__.py
 imperial/agent/__init__.py
+imperial/agent/llm_client.py
+imperial/agent/loop.py
+imperial/agent/tool_registry.py
+imperial/agent/tools.py
 imperial/bus/__init__.py
 imperial/court/__init__.py
+imperial/court/appointments.py
+imperial/court/edicts.py
+imperial/court/impeachments.py
+imperial/court/memorials.py
 imperial/institution/__init__.py
 imperial/rule_engine/__init__.py
 imperial/storage/__init__.py
@@ -11,7 +19,10 @@ imperial_court.egg-info/SOURCES.txt
 imperial_court.egg-info/dependency_links.txt
 imperial_court.egg-info/requires.txt
 imperial_court.egg-info/top_level.txt
+tests/test_agent.py
 tests/test_bus.py
+tests/test_court.py
 tests/test_institution.py
+tests/test_llm_integration.py
 tests/test_rule_engine.py
 tests/test_storage.py

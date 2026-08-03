@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS impeachments (
   recommendation TEXT,
   status TEXT DEFAULT 'pending',
   verdict TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
   decided_at TEXT
 );
 
