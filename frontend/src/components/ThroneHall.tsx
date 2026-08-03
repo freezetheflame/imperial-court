@@ -21,6 +21,7 @@ export function ThroneHall() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stage, setStage] = useState<PresentationStage>("idle");
   const [isCeremonial, setIsCeremonial] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const selected = memorials.find(m => m.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export function ThroneHall() {
     },
   });
 
-  function openMemorial(m: Memorial) { setSelectedId(m.id); setIsCeremonial(false); setStage("idle"); }
+  function openMemorial(m: Memorial) { setSelectedId(m.id); setIsCeremonial(false); setStage("idle"); setShowDrawer(false); }
 
   return <section className="throne-hall" aria-label="金銮殿">
     <div className="hall-ceiling"><div className="plaque">正大光明</div></div>
@@ -76,9 +77,22 @@ export function ThroneHall() {
 
     <div className="imperial-desk">
       <div className="brush-rack" aria-hidden="true"><i /><i /><span /><b /></div>
-      <button className={`memorial-stack${pending.length ? " has-memorials" : ""}`} onClick={() => pending[0] && openMemorial(pending[0])} disabled={!pending.length} aria-label="打开待批奏折"><i /><i /><span>{pending.length ? `${pending.length} 奏待批` : "奏匣已清"}</span></button>
+      <button className={`memorial-stack${pending.length ? " has-memorials" : ""}`} onClick={() => setShowDrawer(true)} aria-label="打开奏匣"><i /><i /><span>{memorials.length ? `${memorials.length} 奏在匣` : "奏匣已清"}</span></button>
       <div className="desk-edge"><span>日理万机</span></div>
     </div>
+
+    {showDrawer && <div className="memorial-drawer" aria-label="奏匣">
+      <button className="drawer-close" onClick={() => setShowDrawer(false)} aria-label="合上奏匣">×</button>
+      <div className="drawer-head"><span>御案奏匣</span><b>{memorials.length} 封</b></div>
+      {memorials.length === 0 && <p className="drawer-empty">匣中空空，尚无奏章呈上。</p>}
+      <ul className="drawer-list">{memorials.map(m => <li key={m.id}>
+        <button className={m.status === "submitted" ? "unread" : ""} onClick={() => openMemorial(m)}>
+          <span className="drawer-mark">{m.status === "submitted" ? "未批" : VERDICTS[m.verdict as keyof typeof VERDICTS] ?? m.verdict}</span>
+          <span className="drawer-from">{m.from_post_title ?? m.from_post}</span>
+          <span className="drawer-preview">{m.content.slice(0, 24)}…</span>
+        </button>
+      </li>)}</ul>
+    </div>}
 
     {selected && <div className={`memorial-scroll ${stage === "arriving" ? "arriving-scroll" : stage === "departing" ? "departing-scroll" : "open"}`}>
       <button className="scroll-close" onClick={() => { setSelectedId(null); setStage("idle"); setIsCeremonial(false); }} aria-label="合上奏折">×</button>
