@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+/* Imperial Court base theme — parchment/vermillion tones.
+   Design tokens; the kimi pass will elevate the visuals. */
+@theme {
+  --color-imperial-vermillion: #8b1a1a;
+  --color-imperial-gold: #a67c00;
+  --color-imperial-parchment: #fdf8f0;
+}
+
+:root {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+  color-scheme: light;
+  color: #2b2b2b;
+  background: var(--color-imperial-parchment);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1, h2, h3 {
+  color: var(--color-imperial-vermillion);
+}
