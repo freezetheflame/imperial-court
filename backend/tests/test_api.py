@@ -135,3 +135,17 @@ def test_events_query(client):
     r = client.get("/api/events?kind=edict")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
+
+
+def test_imperial_db_env_override(tmp_path, monkeypatch):
+    """$IMPERIAL_DB env var must control the default DB path."""
+    import imperial.api.bootstrap as b
+    from imperial.api.main import create_app
+
+    db_file = tmp_path / "env.db"
+    monkeypatch.setenv("IMPERIAL_DB", str(db_file))
+    app = create_app(seed_posts=False)
+    assert app.state.ctx.storage.path == db_file
+    # a write lands in the env-specified file
+    app.state.ctx.storage.insert_event("test", None)
+    assert db_file.exists()

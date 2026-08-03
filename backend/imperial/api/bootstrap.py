@@ -8,6 +8,7 @@ service and the frontend have something to show.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,14 @@ from imperial.storage import Storage
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # backend/
 DEFAULT_INSTITUTION = BACKEND_ROOT / "institutions" / "sanguan-jiuqing.yaml"
-DEFAULT_DB = BACKEND_ROOT / "imperial.db"
+
+
+def _default_db() -> Path:
+    """DB path: $IMPERIAL_DB env override, else backend/imperial.db."""
+    env = os.environ.get("IMPERIAL_DB")
+    if env:
+        return Path(env)
+    return BACKEND_ROOT / "imperial.db"
 
 
 @dataclass
@@ -53,12 +61,12 @@ class AppContext:
 
 def build_context(
     *,
-    db_path: Path | str = DEFAULT_DB,
-    institution_path: Path | str = DEFAULT_INSTITUTION,
+    db_path: Path | str | None = None,
+    institution_path: Path | str | None = None,
     seed_posts: bool = True,
 ) -> AppContext:
-    storage = Storage(db_path)
-    institution = load_institution(institution_path)
+    storage = Storage(db_path or _default_db())
+    institution = load_institution(institution_path or DEFAULT_INSTITUTION)
     engine = RuleEngine(institution)
     bus = Bus(institution, storage, engine)
     appointments = AppointmentService(storage)

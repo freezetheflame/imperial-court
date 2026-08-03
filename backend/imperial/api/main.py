@@ -24,7 +24,7 @@ def create_app(
 ) -> FastAPI:
     backend_root = Path(__file__).resolve().parent.parent.parent  # backend/
     ctx = build_context(
-        db_path=db_path or backend_root / "imperial.db",
+        db_path=db_path,
         institution_path=institution_path or backend_root / "institutions" / "sanguan-jiuqing.yaml",
         seed_posts=seed_posts,
     )

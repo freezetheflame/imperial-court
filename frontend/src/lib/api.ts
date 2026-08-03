@@ -14,15 +14,18 @@ export interface Memorial {
   id: string;
   edict_id?: string | null;
   from_post: string;
+  from_post_title?: string;
   content: string;
   status: string;
   verdict?: string | null;
   created_at?: string;
+  is_urgent?: boolean;
 }
 
 export interface Impeachment {
   id: string;
   target_post: string;
+  target_post_title?: string;
   type: string;
   evidence: string;
   brief?: string | null;
