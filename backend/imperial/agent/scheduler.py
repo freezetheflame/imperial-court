@@ -37,11 +37,13 @@ class AgentScheduler:
         loop_factory: Any,  # (post_id) -> AgentLoop, injected for testability
         posts: list[str] | None = None,
         tracker: Any | None = None,  # TaskTracker shared with tools
+        edicts: Any | None = None,  # EdictService — persists completion
     ):
         self.institution = institution
         self.bus = bus
         self.memorials = memorials
         self.loop_factory = loop_factory
+        self.edicts = edicts
         self._running: set[str] = set()
         self._system_prompts = {
             p.id: build_system_prompt(p.id, institution) for p in institution.posts
@@ -60,6 +62,8 @@ class AgentScheduler:
         """All subtasks of an edict are done → chancery summarizes once."""
         prog = self.tracker.progress(edict_id)
         summaries = prog.summaries() if prog else []
+        if self.edicts is not None:
+            self.edicts.mark_completed(edict_id)  # persist across restarts
         await self.bus.post_message(
             "system", "chancery", "aggregate",
             payload={"edict_id": edict_id, "summaries": summaries},

@@ -162,7 +162,7 @@ def build_context(
 
         scheduler = AgentScheduler(
             institution=institution, bus=bus, memorials=memorials,
-            loop_factory=loop_factory, tracker=tracker,
+            loop_factory=loop_factory, tracker=tracker, edicts=edicts,
         )
 
     return AppContext(

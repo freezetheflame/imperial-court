@@ -95,6 +95,13 @@ class EdictService:
             "SELECT id, title, status, issued_at FROM edicts ORDER BY issued_at DESC"
         )
 
+    def mark_completed(self, edict_id: str) -> None:
+        """Persist completion — survives restarts (progress derives from it)."""
+        self.storage.execute(
+            "UPDATE edicts SET status = 'completed' WHERE id = ? AND status != 'completed'",
+            (edict_id,),
+        )
+
     def get(self, edict_id: str) -> dict[str, Any] | None:
         row = self.storage.query_one(
             "SELECT * FROM edicts WHERE id = ?", (edict_id,)

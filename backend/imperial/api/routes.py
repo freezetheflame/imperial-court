@@ -93,11 +93,30 @@ def get_edict(edict_id: str) -> dict[str, Any]:
 
 @router.get("/edicts/{edict_id}/progress")
 def get_edict_progress(edict_id: str) -> dict[str, Any]:
-    """Task progress for an edict (agent network execution status)."""
-    if _ctx().edicts.get(edict_id) is None:
+    """Task progress for an edict (agent network execution status).
+
+    Storage-backed fallback: if the in-memory tracker lost state (restart)
+    but the edict is completed or its memorial exists, report done.
+    """
+    edict = _ctx().edicts.get(edict_id)
+    if edict is None:
         raise HTTPException(404, "edict not found")
     snap = _ctx().tracker.snapshot(edict_id)
     assert snap is not None
+    # persist/derive completion from durable state
+    if snap["stage"] != "done":
+        if edict.get("status") == "completed":
+            snap["stage"] = "done"
+            snap["percent"] = 100
+            snap["total"] = snap["total"] or 1
+            snap["done"] = snap["done"] or 1
+        else:
+            mems = _ctx().memorials.list()
+            if any(m.get("edict_id") == edict_id for m in mems):
+                snap["stage"] = "done"
+                snap["percent"] = 100
+                snap["total"] = snap["total"] or 1
+                snap["done"] = snap["done"] or 1
     return snap
 
 
