@@ -34,7 +34,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 @keyframes sceneEnter { from { opacity: 0; transform: scale(.985) translateY(12px); } to { opacity: 1; transform: none; } }
 
 /* throne hall */
-.throne-hall { position: relative; isolation: isolate; min-height: max(100vh, 780px); overflow: hidden; color: #f1dbab; background: radial-gradient(ellipse at 50% 22%, #7c3a2288 0, #2d1210 31%, transparent 52%), linear-gradient(90deg, #180908, #3b1712 19%, #210d0b 50%, #3b1712 81%, #180908); }
+.throne-hall { position: relative; isolation: isolate; min-height: max(100vh, 780px); overflow: hidden; color: #f1dbab; background:
+  radial-gradient(ellipse at 50% 30%, #ffd9a066 0, transparent 55%),
+  linear-gradient(180deg, #3a1c0dcc 0%, #5a2c14aa 30%, #2a120acc 70%, #1a0a06ee 100%),
+  url("./assets/hall-bg.jpg") center 30% / cover no-repeat,
+  #2d1210; }
 .hall-ceiling { position: absolute; z-index: 2; inset: 64px 0 auto; height: 25%; background: repeating-linear-gradient(90deg, #28100d 0 7%, #542319 7.5% 8%, #28100d 8.5% 16%), linear-gradient(#170907, #421a13); clip-path: polygon(0 0,100% 0,87% 100%,13% 100%); box-shadow: 0 18px 35px #000b; }
 .plaque { position: absolute; left: 50%; top: 30px; translate: -50%; padding: 10px 27px; white-space: nowrap; color: #e5bd58; border: 3px ridge #b9802b; background: #1b0b09; box-shadow: 0 8px 18px #0008, inset 0 0 15px #8d5c2033; font-size: clamp(1.05rem, 2vw, 1.55rem); letter-spacing: .32em; }
 .distant-doors { position: absolute; z-index: 1; left: 50%; top: 22%; translate: -50%; display: flex; width: 19%; min-width: 150px; height: 32%; border: 7px solid #260d09; box-shadow: 0 0 0 2px #8e5e264f, 0 0 45px #e4a5461c; perspective: 300px; }
