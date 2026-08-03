@@ -13,7 +13,7 @@
   <a href="#快速开始"><img src="https://img.shields.io/badge/前端-React%2019-61dafb" alt="frontend"></a>
   <a href="#测试"><img src="https://img.shields.io/badge/测试-67%20passed-4caf50" alt="tests"></a>
   <a href="#真实运行效果"><img src="https://img.shields.io/badge/LLM-DeepSeek-6772e5" alt="llm"></a>
-  <a href="https://github.com/freezetheflame/imperial-court"><img src="https://img.shields.io/badge/许可-私有-8b1a1a" alt="license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/许可-MIT-8b1a1a" alt="license"></a>
 </p>
 
 ---
