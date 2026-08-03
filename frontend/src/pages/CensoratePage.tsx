@@ -1,11 +1,29 @@
+import { useState } from "react";
+import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { Impeachment } from "../lib/api";
 
+const TYPE_LABELS: Record<string, string> = { tool_violation: "越权用器", comm_violation: "违制通信", dereliction: "失职" };
+
 export function CensoratePage() {
-  const qc = useQueryClient(); const { data: overview } = useQuery({ queryKey: ["censorate", "overview"], queryFn: () => api.censorateOverview() }); const { data: impeachments } = useQuery({ queryKey: ["impeachments"], queryFn: () => api.listImpeachments() });
-  const verdict = useMutation({ mutationFn: ({ id, v }: { id: string; v: string }) => api.verdictImpeachment(id, v, "朱批"), onSuccess: () => { qc.invalidateQueries({ queryKey: ["impeachments"] }); qc.invalidateQueries({ queryKey: ["censorate"] }); qc.invalidateQueries({ queryKey: ["posts"] }); } });
-  return <section><div className="page-heading"><div><div className="eyebrow">御史台 · CENSORATE</div><h2>御史台案卷</h2><p>明察百官违制，候陛下裁决。</p></div><span className="seal">执法<br />如山</span></div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 34 }}>{[["在审案件", overview?.pending_impeachments], ["待裁决", overview?.pending_verdicts], ["近期违制", overview?.recent_violations], ["已发警告", overview?.warnings_issued], ["已革职", overview?.removals]].map(([label, value]) => <div className="panel" key={label as string} style={{ padding: "15px 10px", textAlign: "center" }}><div style={{ fontSize: "1.7rem", color: "#8b1a1a" }}>{value ?? 0}</div><div style={{ color: "#806e5d", fontSize: ".78rem" }}>{label}</div></div>)}</div>
-    <div className="eyebrow" style={{ marginBottom: 12 }}>在审案卷 · PENDING CASES</div>{impeachments?.length === 0 && <div className="panel" style={{ padding: 40, textAlign: "center", color: "#806e5d" }}>海晏河清，暂无弹劾案卷。</div>}{impeachments?.map((imp: Impeachment) => <article className="paper" key={imp.id} style={{ padding: "21px 24px 21px 30px", marginBottom: 16 }}><header style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ fontSize: "1.12rem" }}>弹劾 · {imp.target_post_title ?? imp.target_post}</strong><span style={{ color: imp.status === "pending" ? "#8b1a1a" : "#796d63", fontSize: ".8rem" }}>{imp.status}</span></header><p style={{ margin: "14px 0 8px", lineHeight: 1.8 }}><b>案由：</b>{imp.evidence}</p>{imp.brief && <p style={{ color: "#796d63", fontSize: ".92rem", lineHeight: 1.7 }}><b>调查简报：</b>{imp.brief}</p>}{imp.recommendation && <p style={{ margin: "12px 0", color: "#604d3c" }}>御史台拟议：<strong style={{ color: imp.recommendation === "removal" ? "#8b1a1a" : "#a67c00" }}>{imp.recommendation === "removal" ? "革职查办" : "留任警告"}</strong></p>}{imp.status === "pending" && imp.recommendation && <div style={{ display: "flex", gap: 8, marginTop: 15, borderTop: "1px solid #b7884828", paddingTop: 14 }}><button className="action-btn" onClick={() => verdict.mutate({ id: imp.id, v: "approve" })} disabled={verdict.isPending}>朱批 · 准奏</button><button className="action-btn gold" onClick={() => verdict.mutate({ id: imp.id, v: "reject" })} disabled={verdict.isPending}>朱批 · 驳回</button></div>}{imp.verdict && <div className="verdict-ink" style={{ marginTop: 13 }}>裁决：{imp.verdict}</div>}</article>)}</section>;
+  const qc = useQueryClient();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const { data: overview } = useQuery({ queryKey: ["censorate", "overview"], queryFn: () => api.censorateOverview() });
+  const { data: impeachments = [] } = useQuery({ queryKey: ["impeachments"], queryFn: () => api.listImpeachments() });
+  const verdict = useMutation({ mutationFn: ({ id, value }: { id: string; value: string }) => api.verdictImpeachment(id, value, "朱批"), onSuccess: () => { qc.invalidateQueries({ queryKey: ["impeachments"] }); qc.invalidateQueries({ queryKey: ["censorate"] }); qc.invalidateQueries({ queryKey: ["posts"] }); } });
+
+  return <section className="side-scene censorate-scene">
+    <div className="archive-shelves" aria-hidden="true"><i /><i /><i /><i /></div>
+    <header className="scene-heading"><div><span>肃纪纠察 · CENSORATE</span><h1>御史台案卷库</h1><p>台阁森然，诸案封存于此，候圣裁。</p></div><NavLink to="/" className="return-token">回銮金殿</NavLink></header>
+    <div className="register-strip">{[["在审", overview?.pending_impeachments], ["待裁", overview?.pending_verdicts], ["违制", overview?.recent_violations], ["警告", overview?.warnings_issued], ["革职", overview?.removals]].map(([label, value]) => <div key={label as string}><strong>{value ?? 0}</strong><span>{label}</span></div>)}</div>
+    {!impeachments.length && <div className="scene-empty">案架清肃，暂无弹劾卷宗。</div>}
+    <div className="dossier-shelf">{impeachments.map((imp: Impeachment, index) => {
+      const open = openId === imp.id;
+      return <article key={imp.id} className={`dossier ${open ? "open" : ""}`} style={{ "--dossier-index": index } as React.CSSProperties}>
+        <button className="dossier-spine" onClick={() => setOpenId(open ? null : imp.id)} aria-expanded={open}><span className="dossier-number">案 {String(index + 1).padStart(2, "0")}</span><strong>弹劾<br />{imp.target_post_title ?? imp.target_post}</strong><i>{TYPE_LABELS[imp.type] ?? imp.type}</i><b className={imp.status === "pending" ? "pending" : "closed"}>{imp.status === "pending" ? "待裁" : "已断"}</b></button>
+        {open && <div className="dossier-sheet"><button className="sheet-close" onClick={() => setOpenId(null)}>合卷</button><span className="folio-kicker">御史台封呈 · {imp.id}</span><h2>弹劾 {imp.target_post_title ?? imp.target_post}</h2><dl><dt>案由证据</dt><dd>{imp.evidence}</dd>{imp.brief && <><dt>调查简报</dt><dd>{imp.brief}</dd></>}<dt>台议</dt><dd className="recommendation">{imp.recommendation === "removal" ? "革职查办" : imp.recommendation === "warning" ? "留任警告" : "尚未拟议"}</dd></dl>{imp.status === "pending" && imp.recommendation && <div className="folio-verdicts"><button onClick={() => verdict.mutate({ id: imp.id, value: "approve" })} disabled={verdict.isPending}>朱批 · 准奏</button><button onClick={() => verdict.mutate({ id: imp.id, value: "reject" })} disabled={verdict.isPending}>朱批 · 驳回</button></div>}{imp.verdict && <div className="red-verdict">圣裁 · {imp.verdict}</div>}</div>}
+      </article>;
+    })}</div>
+  </section>;
 }

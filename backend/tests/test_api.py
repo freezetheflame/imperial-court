@@ -150,3 +150,37 @@ def test_imperial_db_env_override(tmp_path, monkeypatch):
     # a write lands in the env-specified file
     app.state.ctx.storage.insert_event("test", None)
     assert db_file.exists()
+
+
+def test_edict_progress_endpoint(client):
+    """GET /api/edicts/{id}/progress returns tracker snapshot stages."""
+    r = client.post("/api/edicts", json={
+        "title": "进度测试", "task_type": "research", "description": "测试",
+    })
+    edict_id = r.json()["id"]
+
+    # fresh edict → pending (no subtasks yet)
+    p = client.get(f"/api/edicts/{edict_id}/progress")
+    assert p.status_code == 200
+    assert p.json()["stage"] == "pending"
+    assert p.json()["percent"] == 0
+
+    # simulate a registered subtask (as dispatch_task would)
+    ctx = client.app.state.ctx
+    ctx.tracker.register_subtask(edict_id, "finance", "finance", "收集数据")
+    p2 = client.get(f"/api/edicts/{edict_id}/progress")
+    assert p2.status_code == 200
+    assert p2.json()["stage"] == "executing"
+    assert p2.json()["total"] == 1
+    assert p2.json()["done"] == 0
+
+    # complete it → done
+    ctx.tracker.complete_subtask(edict_id, "finance", "完成")
+    p3 = client.get(f"/api/edicts/{edict_id}/progress")
+    assert p3.json()["stage"] == "done"
+    assert p3.json()["percent"] == 100
+
+
+def test_edict_progress_404(client):
+    r = client.get("/api/edicts/nonexistent/progress")
+    assert r.status_code == 404

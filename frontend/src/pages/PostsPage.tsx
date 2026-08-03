@@ -1,13 +1,27 @@
 import { useState } from "react";
+import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { Post } from "../lib/api";
 
-const ROLE_LABELS: Record<string, string> = { coordinator: "总协调", executor: "执行", inspector: "监察", inspector_assistant: "监察助手", external: "对外" };
-const STATUS_LABELS: Record<string, string> = { active: "在职", vacant: "空缺", removed: "革职" };
+const ROLE_LABELS: Record<string, string> = { coordinator: "总揽中枢", executor: "奉旨执行", inspector: "监察百官", inspector_assistant: "协理监察", external: "典掌外务" };
+const STATUS_LABELS: Record<string, string> = { active: "在职", vacant: "待任", removed: "革职" };
 
 export function PostsPage() {
-  const qc = useQueryClient(); const { data: posts } = useQuery({ queryKey: ["posts"], queryFn: () => api.listPosts() }); const [agentName, setAgentName] = useState<Record<string, string>>({});
+  const qc = useQueryClient();
+  const { data: posts = [] } = useQuery({ queryKey: ["posts"], queryFn: () => api.listPosts() });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState<Record<string, string>>({});
   const appoint = useMutation({ mutationFn: ({ id, agent }: { id: string; agent: string }) => api.appointPost(id, agent), onSuccess: () => qc.invalidateQueries({ queryKey: ["posts"] }) });
-  return <section><div className="page-heading"><div><div className="eyebrow">百官 · OFFICES</div><h2>官职墙</h2><p>百官各司其职，空缺待诏任命。</p></div><span className="seal">百官<br />名录</span></div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(235px, 1fr))", gap: 16 }}>{posts?.map((p: Post) => <article className="panel" key={p.id} style={{ padding: "20px", borderColor: p.status === "vacant" ? "#a67c00" : p.status === "removed" ? "#aaa" : "#8b1a1a66", borderStyle: p.status === "vacant" ? "dashed" : "solid", opacity: p.status === "removed" ? .68 : 1 }}><header style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}><div><div className="eyebrow">{ROLE_LABELS[p.role] ?? p.role}</div><h3 style={{ margin: "5px 0 0", fontSize: "1.35rem" }}>{p.title}</h3></div><span style={{ color: p.status === "vacant" ? "#a67c00" : p.status === "removed" ? "#777" : "#8b1a1a", fontSize: ".78rem" }}>{STATUS_LABELS[p.status] ?? p.status}</span></header><div style={{ margin: "20px 0", padding: "13px", background: "#f6ecde", color: "#604d3c", fontSize: ".82rem", lineHeight: 1.8 }}>官署：{p.id}<br />品秩：{p.model ?? "待定"}{p.reports_to && <><br />隶属：{p.reports_to}</>}{p.current_agent && <><br />现任：{p.current_agent}</>}</div>{p.status === "vacant" && <div style={{ display: "flex", gap: 7 }}><input aria-label={`${p.title}任命人选`} placeholder="agent 名（可留空）" value={agentName[p.id] ?? ""} onChange={e => setAgentName(s => ({ ...s, [p.id]: e.target.value }))} style={{ minWidth: 0, flex: 1, padding: "9px", border: "1px solid #c5a57999", background: "#fffdf9" }} /><button className="action-btn" onClick={() => appoint.mutate({ id: p.id, agent: agentName[p.id] || `agent_${p.id}` })} disabled={appoint.isPending}>任命</button></div>}</article>)}</div></section>;
+
+  return <section className="side-scene roster-scene">
+    <header className="scene-heading"><div><span>铨选百官 · IMPERIAL ROSTER</span><h1>百官名册</h1><p>展卷察官守，缺位者候旨补授。</p></div><NavLink to="/" className="return-token">回銮金殿</NavLink></header>
+    <div className="roster-book"><div className="book-seam" /><div className="book-title">大朝官员名录</div><div className="roster-grid">{posts.map((post: Post) => {
+      const open = openId === post.id;
+      return <article key={post.id} className={`official-plaque ${post.status} ${open ? "open" : ""}`}>
+        <button className="plaque-summary" onClick={() => setOpenId(open ? null : post.id)} aria-expanded={open}><span>{ROLE_LABELS[post.role] ?? post.role}</span><strong>{post.title}</strong><i>{post.id}</i><b>{STATUS_LABELS[post.status] ?? post.status}</b></button>
+        {open && <div className="plaque-detail"><dl><dt>职掌</dt><dd>{ROLE_LABELS[post.role] ?? post.role}</dd><dt>品秩</dt><dd>{post.model ?? "未定"}</dd><dt>隶属</dt><dd>{post.reports_to ?? "御前直辖"}</dd><dt>现任</dt><dd>{post.current_agent ?? "虚位以待"}</dd></dl>{post.status === "vacant" && <div className="appointment-box"><label>拟任人选<input value={agentName[post.id] ?? ""} onChange={e => setAgentName(state => ({ ...state, [post.id]: e.target.value }))} placeholder="留空由系统新建" /></label><button onClick={() => appoint.mutate({ id: post.id, agent: agentName[post.id] || `agent_${post.id}` })} disabled={appoint.isPending}>盖印任命</button></div>}</div>}
+      </article>;
+    })}</div></div>
+  </section>;
 }

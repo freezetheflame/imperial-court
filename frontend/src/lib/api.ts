@@ -10,6 +10,21 @@ export interface Edict {
   form_data?: Record<string, unknown>;
 }
 
+export interface EdictProgress {
+  edict_id: string;
+  stage: "pending" | "executing" | "done";
+  total: number;
+  done: number;
+  percent: number;
+  subtasks: {
+    key: string;
+    target: string;
+    title: string;
+    completed: boolean;
+    summary?: string | null;
+  }[];
+}
+
 export interface Memorial {
   id: string;
   edict_id?: string | null;
@@ -79,6 +94,7 @@ export const api = {
   // edicts
   listEdicts: () => request<Edict[]>("/api/edicts"),
   getEdict: (id: string) => request<Edict>(`/api/edicts/${id}`),
+  getEdictProgress: (id: string) => request<EdictProgress>(`/api/edicts/${id}/progress`),
   createEdict: (body: {
     title: string;
     task_type: string;

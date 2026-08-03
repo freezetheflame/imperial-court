@@ -90,6 +90,16 @@ def get_edict(edict_id: str) -> dict[str, Any]:
     return row
 
 
+@router.get("/edicts/{edict_id}/progress")
+def get_edict_progress(edict_id: str) -> dict[str, Any]:
+    """Task progress for an edict (agent network execution status)."""
+    if _ctx().edicts.get(edict_id) is None:
+        raise HTTPException(404, "edict not found")
+    snap = _ctx().tracker.snapshot(edict_id)
+    assert snap is not None
+    return snap
+
+
 # ── memorials ──────────────────────────────────────────────
 @router.get("/memorials")
 def list_memorials(status: str | None = None) -> list[dict[str, Any]]:

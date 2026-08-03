@@ -90,6 +90,43 @@ class TaskTracker:
     def progress(self, edict_id: str) -> EdictProgress | None:
         return self._progress.get(edict_id)
 
+    def snapshot(self, edict_id: str) -> dict[str, Any] | None:
+        """Structured progress snapshot for the frontend.
+
+        stage:
+          pending    — edict registered, no subtasks yet (chancery decomposing)
+          executing  — subtasks exist, some pending (agents working)
+          done       — all subtasks completed (memorial submitted)
+        """
+        prog = self._progress.get(edict_id)
+        if prog is None:
+            return {"edict_id": edict_id, "stage": "pending", "total": 0, "done": 0, "percent": 0, "subtasks": []}
+        if prog.all_done:
+            stage = "done"
+        elif prog.total == 0:
+            stage = "pending"
+        else:
+            stage = "executing"
+        subtasks = [
+            {
+                "key": k,
+                "target": s.target,
+                "title": s.title,
+                "completed": s.completed,
+                "summary": s.summary,
+            }
+            for k, s in prog.subtasks.items()
+        ]
+        percent = round(prog.done / prog.total * 100) if prog.total else 0
+        return {
+            "edict_id": edict_id,
+            "stage": stage,
+            "total": prog.total,
+            "done": prog.done,
+            "percent": percent,
+            "subtasks": subtasks,
+        }
+
     def is_complete(self, edict_id: str) -> bool:
         prog = self._progress.get(edict_id)
         return prog is not None and prog.all_done

@@ -37,6 +37,12 @@ def create_app(
     )
     broadcaster = EventBroadcaster()
     routes.bind(ctx, broadcaster)
+    # agent-produced memorials (auto-submitted by the scheduler) must reach
+    # the frontend via SSE — wire the broadcaster into MemorialService
+    if ctx.memorials.on_submit is None:
+        ctx.memorials.on_submit = lambda row: asyncio.get_event_loop().create_task(
+            broadcaster.broadcast("memorial", row)
+        )
 
     app = FastAPI(title="Imperial Court", version="0.1.0")
     app.add_middleware(

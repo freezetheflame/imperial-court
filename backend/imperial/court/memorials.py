@@ -34,11 +34,13 @@ class MemorialService:
         bus: Bus,
         institution: Institution,
         engine: RuleEngine | None = None,
+        on_submit: Any | None = None,  # callable(memorial_dict) fired on new memorial
     ):
         self.storage = storage
         self.bus = bus
         self.institution = institution
         self.engine = engine or RuleEngine(institution)
+        self.on_submit = on_submit
 
     # ── creation ───────────────────────────────────────────
     async def submit(
@@ -48,7 +50,7 @@ class MemorialService:
         content: str,
         edict_id: str | None = None,
         msg_type: str = "memorial",
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """A post presents a memorial to the emperor (via the bus)."""
         ok, decision = await self.bus.post_message(
             frm, "emperor", msg_type,
@@ -66,7 +68,10 @@ class MemorialService:
         self.storage.insert_event(
             "memorial", frm, {"memorial_id": mem_id, "type": msg_type, "to": "emperor"}
         )
-        return self.get(mem_id)  # type: ignore[return-value]
+        row = self.get(mem_id)
+        if row is not None and self.on_submit is not None:
+            self.on_submit(row)
+        return row
 
     # ── verdicts ───────────────────────────────────────────
     async def verdict(self, memorial_id: str, verdict: str, comment: str | None = None) -> dict[str, Any]:

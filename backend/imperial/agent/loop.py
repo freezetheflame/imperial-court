@@ -18,6 +18,7 @@ they talk to each other through the bus, not through shared state).
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -104,7 +105,11 @@ class AgentLoop:
         tool_calls: list[ToolCallRecord] = []
         post = self.institution.post(post_id)
         for _ in range(self.max_turns):
-            resp: LLMResponse = self.llm.complete(messages, self.tools.schemas(), model=post.model)
+            # LLM call runs in a thread: it's a blocking HTTP call and must
+            # not freeze the asyncio event loop (FastAPI + scheduler share it)
+            resp: LLMResponse = await asyncio.to_thread(
+                self._complete_llm, messages, post.model
+            )
             if not resp.tool_calls:
                 return AgentRunResult(content=resp.content or "", tool_calls=tool_calls, turns=len(tool_calls) + 1)
 
@@ -159,6 +164,10 @@ class AgentLoop:
             tool_calls=tool_calls,
             turns=self.max_turns,
         )
+
+    def _complete_llm(self, messages: list[dict[str, Any]], model: str | None) -> LLMResponse:
+        """Thread-safe LLM call (complete with model override)."""
+        return self.llm.complete(messages, self.tools.schemas(), model=model)
 
     def run_sync(
         self,
