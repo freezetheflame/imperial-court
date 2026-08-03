@@ -127,11 +127,11 @@ class MemorialService:
     def list(self, status: str | None = None) -> list[dict[str, Any]]:
         if status:
             return self.storage.query(
-                "SELECT id, edict_id, from_post, status FROM memorials WHERE status = ? ORDER BY created_at DESC",
+                "SELECT * FROM memorials WHERE status = ? ORDER BY created_at DESC",
                 (status,),
             )
         return self.storage.query(
-            "SELECT id, edict_id, from_post, status FROM memorials ORDER BY created_at DESC"
+            "SELECT * FROM memorials ORDER BY created_at DESC"
         )
 
     def get(self, memorial_id: str) -> dict[str, Any] | None:

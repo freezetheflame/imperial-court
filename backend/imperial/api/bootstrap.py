@@ -32,6 +32,24 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # backend/
 DEFAULT_INSTITUTION = BACKEND_ROOT / "institutions" / "sanguan-jiuqing.yaml"
 
 
+def _current_surnames(storage: Storage, exclude_post: str | None = None) -> set[str]:
+    """Surnames of all posts currently holding a persona (used for diversity)."""
+    import json as _json
+
+    used: set[str] = set()
+    rows = storage.query("SELECT id, persona FROM posts WHERE persona IS NOT NULL")
+    for r in rows:
+        if exclude_post and r["id"] == exclude_post:
+            continue
+        try:
+            persona = _json.loads(r["persona"])
+        except (TypeError, _json.JSONDecodeError):
+            continue
+        if isinstance(persona, dict) and persona.get("name"):
+            used.add(PersonaService._surname(persona["name"]))
+    return used
+
+
 def _default_db() -> Path:
     """DB path: $IMPERIAL_DB env override, else backend/imperial.db."""
     env = os.environ.get("IMPERIAL_DB")
@@ -78,10 +96,20 @@ class AppContext:
         )
 
     def ensure_personas(self, force: bool = False) -> None:
-        """Generate personas for offices that lack one (lazy, idempotent)."""
+        """Generate personas for offices that lack one (lazy, idempotent).
+
+        Surnames are accumulated as offices are processed so the court ends
+        up with diverse surnames (LLMs otherwise converge on one).
+        """
+        used: set[str] = set()
         for p in self.institution.posts:
-            if force or self.personas.load(p.id) is None:
-                self.personas.save(p.id, self.personas.generate(self.institution, p.id))
+            existing = self.personas.load(p.id)
+            if existing is not None and not force:
+                used.add(self.personas._surname(existing["name"]))  # noqa: SLF001
+                continue
+            persona = self.personas.generate(self.institution, p.id, used_surnames=used)
+            self.personas.save(p.id, persona)
+            used.add(self.personas._surname(persona["name"]))  # noqa: SLF001
 
 
 def build_context(
@@ -98,7 +126,9 @@ def build_context(
     personas = PersonaService(storage, llm=_make_llm() if _llm_available() else None)
     appointments = AppointmentService(
         storage,
-        persona_regenerator=lambda post_id: personas.generate(institution, post_id),
+        persona_regenerator=lambda post_id: personas.generate(
+            institution, post_id, used_surnames=_current_surnames(storage, post_id)
+        ),
     )
     memorials = MemorialService(storage, bus, institution, engine)
     impeachments = ImpeachmentService(storage, bus, appointments)

@@ -11,7 +11,6 @@ deterministic template fallback keeps the system usable offline.
 from __future__ import annotations
 
 import json
-import random
 from typing import Any
 
 from imperial.institution import Institution
@@ -27,7 +26,11 @@ _PERSONA_PROMPT = """你是帝国吏部的人事官，为一位新任官员拟�
   "style": "施政风格（20字内）",
   "origin": "出身履历（40字内，如科举/世家/边功）"
 }}
+约束：姓氏必须从下列姓氏池中选择，且不得使用已用姓氏 {used_surnames}：
+{姓氏池}
 """
+
+_SURNAME_POOL = "王 李 张 刘 陈 杨 赵 黄 周 吴 徐 孙 马 朱 胡 郭 何 高 林 罗 郑 梁 谢 宋 唐 许 韩 冯 邓 曹 彭 曾 萧 田 董 潘 袁 蒋 蔡 余 杜 叶 程 苏 魏 吕 丁 任 卢 姚 姜 崔 钟 谭 陆 范 汪 廖 石 金 韦 贾 夏 傅 方 邹 熊 白 孟 秦 邱 侯 江 尹 薛 段 雷 龙 黎 史 陶 贺 毛 郝 顾 龚 邵 万 钱 严 覃 武 戴 莫 孔 向 常 温 康 施 文 牛 樊 葛 邢 齐 安 洪 鲁 伍 季 欧阳 慕容 上官 司马"
 
 _ROLE_HINTS = {
     "coordinator": "统筹百官、运筹帷幄",
@@ -39,8 +42,6 @@ _ROLE_HINTS = {
 
 _FALLBACK_NAMES = ["沈观澜", "裴长策", "顾明远", "谢清和", "陆衡之", "韩守拙", "柳文昭", "楚怀瑾"]
 
-_FALLBACK_STYLES = ["秉公持正，雷厉风行", "温和务实，步步为营", "峻切刚毅，执法如山", "沉稳老练，深谋远虑"]
-
 
 class PersonaService:
     def __init__(self, storage: Storage, llm: Any | None = None):
@@ -48,25 +49,46 @@ class PersonaService:
         self.llm = llm  # LLMClient or None (offline fallback)
 
     # ── generation ─────────────────────────────────────────
-    def generate(self, institution: Institution, post_id: str) -> dict[str, str]:
-        post = institution.post(post_id)
-        role_desc = _ROLE_HINTS.get(post.role, "各司其职")
-        prompt = _PERSONA_PROMPT.format(title=post.title, post_id=post.id, role_desc=role_desc)
-        if self.llm is not None:
-            try:
-                resp = self.llm.complete(
-                    [{"role": "user", "content": prompt}],
-                )
-                persona = self._parse(resp.content or "")
-                if persona:
-                    return persona
-            except Exception:  # noqa: BLE001 — fall back to template
-                pass
-        return self._fallback(post_id)
+    def generate(
+        self,
+        institution: Institution,
+        post_id: str,
+        used_surnames: set[str] | None = None,
+    ) -> dict[str, str]:
+        """Generate a persona. `used_surnames` forces surname diversity.
 
-    def regenerate(self, institution: Institution, post_id: str) -> dict[str, str]:
+        Tries the LLM (if present) with the constraint; validates the surname
+        is new; retries a few times; falls back to the template pool.
+        """
+        post = institution.post(post_id)
+        used = used_surnames or set()
+        role_desc = _ROLE_HINTS.get(post.role, "各司其职")
+        if self.llm is not None:
+            for _ in range(3):
+                prompt = _PERSONA_PROMPT.format(
+                    title=post.title, post_id=post.id, role_desc=role_desc,
+                    used_surnames="、".join(sorted(used)) if used else "无",
+                    姓氏池=_SURNAME_POOL,
+                )
+                try:
+                    resp = self.llm.complete(
+                        [{"role": "user", "content": prompt}],
+                    )
+                    persona = self._parse(resp.content or "")
+                except Exception:  # noqa: BLE001 — network hiccup → retry/fallback
+                    persona = None
+                if persona and (not used or self._surname(persona["name"]) not in used):
+                    return persona
+        return self._fallback(used)
+
+    def regenerate(
+        self,
+        institution: Institution,
+        post_id: str,
+        used_surnames: set[str] | None = None,
+    ) -> dict[str, str]:
         """New person in the office (after removal/appointment)."""
-        return self.generate(institution, post_id)
+        return self.generate(institution, post_id, used_surnames)
 
     # ── persistence ────────────────────────────────────────
     def save(self, post_id: str, persona: dict[str, str]) -> None:
@@ -86,6 +108,14 @@ class PersonaService:
 
     # ── helpers ────────────────────────────────────────────
     @staticmethod
+    def _surname(name: str) -> str:
+        """Extract the surname (first char; compound surnames handled)."""
+        for s in ("欧阳", "慕容", "上官", "司马", "夏侯", "诸葛"):
+            if name.startswith(s):
+                return s
+        return name[0] if name else ""
+
+    @staticmethod
     def _parse(content: str) -> dict[str, str] | None:
         import re
 
@@ -101,13 +131,25 @@ class PersonaService:
         return {k: str(data[k]) for k in ("name", "courtesy", "temperament", "style", "origin")}
 
     @staticmethod
-    def _fallback(post_id: str) -> dict[str, str]:
-        name = random.choice(_FALLBACK_NAMES)
-        courtesy = name[-1] + "之"
+    def _fallback(used: set[str] | None = None) -> dict[str, str]:
+        """Template persona with a surname not already in use."""
+        used = used or set()
+        for name in _FALLBACK_NAMES:
+            if PersonaService._surname(name) not in used:
+                courtesy = name[-1] + "之"
+                return {
+                    "name": name,
+                    "courtesy": courtesy,
+                    "temperament": "持重端方",
+                    "style": "秉公持正，雷厉风行",
+                    "origin": "以贤良方正举荐入仕",
+                }
+        # all surnames taken — allow repeat (extremely unlikely with 8 posts)
+        name = _FALLBACK_NAMES[0]
         return {
             "name": name,
-            "courtesy": courtesy,
+            "courtesy": name[-1] + "之",
             "temperament": "持重端方",
-            "style": random.choice(_FALLBACK_STYLES),
+            "style": "秉公持正，雷厉风行",
             "origin": "以贤良方正举荐入仕",
         }
