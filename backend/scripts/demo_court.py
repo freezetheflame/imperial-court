@@ -76,25 +76,19 @@ async def main() -> None:
     print(f"   {edict['formal_text']}")
     print(f"   (edict: {edict['id']})")
 
-    # ── 2. drive the scheduler until a memorial reaches the emperor ──
+    # ── 2. drive the scheduler until an aggregate memorial reaches the emperor ──
     print("\n⏳ 朝堂运转中……（agent 正在用 DeepSeek 思考与行动）")
 
-    # keep pumping until the chancery delivers a memorial that reflects the
-    # executor's report (a chancery agent that only says "waiting" isn't final)
-    final_memorial: dict | None = None
-    for tick in range(120):  # up to 120 * 0.5s ≈ 60s
+    # with aggregation, the chancery memorializes ONCE after all subtasks
+    # report back. Wait for that aggregate memorial.
+    for tick in range(150):  # up to 150 * 0.5s ≈ 75s
         await scheduler.pump_once()
         memorials = ctx.memorials.list()
         if memorials:
-            full = ctx.memorials.get(memorials[0]["id"])
-            if full and "等待" not in full["content"][:60]:
-                final_memorial = memorials[0]
-                break
+            break
         await asyncio.sleep(0.5)
 
-    # give the executor's report time to land even if the chancery already
-    # memorialized — let the agent network settle (finance needs a full
-    # agent cycle: receive → run_task → report_result)
+    # let the agent network settle (finance needs receive → run → report)
     for _ in range(40):
         await scheduler.pump_once()
         await asyncio.sleep(0.3)

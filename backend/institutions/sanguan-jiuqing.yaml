@@ -99,6 +99,11 @@ institution:
       to: chancery
       type: [edict, correction]
 
+    # 系统 → 丞相：聚合完成通知（所有子任务回报后触发汇总）
+    - from: system
+      to: chancery
+      type: [aggregate]
+
     # 皇帝 → 御史大夫：弹劾裁决
     - from: emperor
       to: censor

@@ -10,6 +10,7 @@ import pytest
 from imperial.agent.loop import AgentLoop
 from imperial.agent.scheduler import AgentScheduler
 from imperial.agent.tools import build_tools
+from imperial.agent.tracker import TaskTracker
 from imperial.bus import Bus, Message
 from imperial.court.appointments import AppointmentService
 from imperial.court.edicts import EdictService
@@ -28,7 +29,11 @@ def world(institution, storage):
     memorials = MemorialService(storage, bus, institution, engine)
     impeachments = ImpeachmentService(storage, bus, appointments)
     edicts = EdictService(storage, bus)
-    tools = build_tools(bus=bus, storage=storage, memorials=memorials, appointments=appointments)
+    tracker = TaskTracker()
+    tools = build_tools(
+        bus=bus, storage=storage, memorials=memorials, appointments=appointments,
+        tracker=tracker,
+    )
 
     fake_llms: dict[str, FakeLLM] = {}
 
@@ -41,46 +46,61 @@ def world(institution, storage):
 
     scheduler = AgentScheduler(
         institution=institution, bus=bus, memorials=memorials, loop_factory=loop_factory,
+        tracker=tracker,
     )
     return {
         "bus": bus, "scheduler": scheduler, "memorials": memorials, "edicts": edicts,
         "impeachments": impeachments, "appointments": appointments,
         "fake_llms": fake_llms, "storage": storage, "institution": institution,
+        "tracker": tracker,
     }
 
 
 async def test_edict_flow_creates_memorial(world):
-    """Emperor edict → chancery agent decomposes/dispatches; the memorial
-    comes only after an executor result arrives."""
+    """Emperor edict → chancery decomposes/dispatches → executor reports →
+    all subtasks done → aggregate → ONE memorial."""
     await world["scheduler"].start()
 
-    # chancery agent: decompose + dispatch (no memorial on edict turn)
+    # chancery agent: decompose + dispatch two subtasks to two executors
     world["fake_llms"]["chancery"] = FakeLLM(script=[
         {"tool_calls": [
-            {"name": "decompose_task", "arguments": {"edict_id": "e1", "subtasks": [{"title": "t", "target": "finance"}]}},
-            {"name": "dispatch_task", "arguments": {"edict_id": "e1", "target": "finance", "title": "t", "description": "d"}},
+            {"name": "decompose_task", "arguments": {"edict_id": "e1", "subtasks": [
+                {"title": "t1", "target": "finance"},
+                {"title": "t2", "target": "justice"},
+            ]}},
+            {"name": "dispatch_task", "arguments": {"edict_id": "e1", "target": "finance", "title": "t1", "description": "d1"}},
+            {"name": "dispatch_task", "arguments": {"edict_id": "e1", "target": "justice", "title": "t2", "description": "d2"}},
         ]},
-        {"content": "已分派治粟内史办理。"},
+        {"content": "已分派完毕。"},
+    ])
+    # executor scripts set BEFORE the pump: pump_once drains all queues in
+    # one pass, so finance/justice run in the same pump as chancery's dispatch
+    world["fake_llms"]["finance"] = FakeLLM(script=[
+        {"tool_calls": [{"name": "run_task", "arguments": {"task": "汇总数据"}}]},
+        {"tool_calls": [{"name": "report_result", "arguments": {"edict_id": "e1", "summary": "数据已汇总"}}]},
+        {"content": "已完成。"},
+    ])
+    world["fake_llms"]["justice"] = FakeLLM(script=[
+        {"tool_calls": [{"name": "run_task", "arguments": {"task": "质检"}}]},
+        {"tool_calls": [{"name": "report_result", "arguments": {"edict_id": "e1", "summary": "质检通过"}}]},
+        {"content": "已完成。"},
     ])
 
     await world["edicts"].issue(world_edict_form())
     await world["scheduler"].pump_once()
 
-    # no memorial yet — chancery only decomposed/dispatched on the edict
+    # no memorial yet — chancery only decomposed/dispatched
     assert world["memorials"].list() == []
 
-    # now a result arrives → chancery agent summarizes → memorial
+    # chancery summarizes the aggregate → exactly ONE memorial
     world["fake_llms"]["chancery"] = FakeLLM(script=[
-        {"content": "治粟内史已回报，数据汇总完毕，臣谨奏陛下。"},
+        {"content": "两处回报已汇总，臣谨奏陛下。"},
     ])
-    await world["bus"].post_message(
-        "finance", "chancery", "result",
-        {"edict_id": "e1", "summary": "数据已汇总"},
-    )
-    await world["scheduler"].pump_once()
+    await world["scheduler"].pump_once()  # aggregate → chancery agent → memorial
 
+    # aggregate message fired → chancery summarized → exactly ONE memorial
     memorials = world["memorials"].list()
-    assert len(memorials) == 1
+    assert len(memorials) == 1, f"expected 1 aggregate memorial, got {len(memorials)}"
     assert memorials[0]["from_post"] == "chancery"
     full = world["memorials"].get(memorials[0]["id"])
     assert full is not None and "谨奏" in full["content"]

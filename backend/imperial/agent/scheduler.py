@@ -36,6 +36,7 @@ class AgentScheduler:
         memorials: MemorialService,
         loop_factory: Any,  # (post_id) -> AgentLoop, injected for testability
         posts: list[str] | None = None,
+        tracker: Any | None = None,  # TaskTracker shared with tools
     ):
         self.institution = institution
         self.bus = bus
@@ -46,6 +47,23 @@ class AgentScheduler:
             p.id: build_system_prompt(p.id, institution) for p in institution.posts
         }
         self._posts = posts or [p.id for p in institution.posts]
+        # multi-task aggregation: when an edict's subtasks all complete,
+        # drive the chancery to produce ONE aggregate memorial
+        from imperial.agent.tracker import TaskTracker
+
+        self.tracker = tracker or TaskTracker(on_all_complete=self._on_edict_complete)
+        # rewire callback so it fires regardless of who created the tracker
+        self.tracker.on_all_complete = self._on_edict_complete
+
+    # ── aggregation callback ──────────────────────────────
+    async def _on_edict_complete(self, edict_id: str) -> None:
+        """All subtasks of an edict are done → chancery summarizes once."""
+        prog = self.tracker.progress(edict_id)
+        summaries = prog.summaries() if prog else []
+        await self.bus.post_message(
+            "system", "chancery", "aggregate",
+            payload={"edict_id": edict_id, "summaries": summaries},
+        )
 
     # ── wiring ─────────────────────────────────────────────
     async def start(self) -> None:
@@ -66,9 +84,13 @@ class AgentScheduler:
         if post_id == "censor" and msg.type == "violation_record":
             await self._handle_violation(msg)
             return
-        # executor results go to the chancery for summary, not re-agented
+        # chancery aggregate: all subtasks done → summarize → ONE memorial
+        if post_id == "chancery" and msg.type == "aggregate":
+            await self._run_agent(post_id, msg)
+            return
+        # executor results accumulate at the chancery (aggregation handled
+        # by the tracker; individual results do NOT trigger a memorial)
         if post_id == "chancery" and msg.type == "result":
-            await self._handle_result_to_chancery(msg)
             return
 
         await self._run_agent(post_id, msg)
@@ -98,9 +120,8 @@ class AgentScheduler:
 
     async def _post_agent_action(self, post_id: str, msg: Message, result: Any) -> None:
         """After an agent run, decide whether a memorial to the emperor is due."""
-        # chancery memorializes only after an executor's result arrives —
-        # the edict turn is for decomposing/dispatching, not for reporting yet.
-        if post_id == "chancery" and msg.type == "result":
+        # chancery memorializes once, when all subtasks have aggregated.
+        if post_id == "chancery" and msg.type == "aggregate":
             await self.memorials.submit(
                 frm="chancery",
                 content=result.content,
@@ -122,12 +143,6 @@ class AgentScheduler:
         p = msg.payload or {}
         # delegate to the censor agent to investigate & recommend
         await self._run_agent("censor", msg)
-
-    async def _handle_result_to_chancery(self, msg: Message) -> None:
-        """Executor results accumulate at the chancery; summarize on demand."""
-        # In the minimal flow, executor result → chancery runs a summary agent
-        # turn so the chancery can aggregate and then memorialize.
-        await self._run_agent("chancery", msg)
 
     # ── pump ───────────────────────────────────────────────
     async def pump_once(self) -> None:

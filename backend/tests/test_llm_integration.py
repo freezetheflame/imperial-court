@@ -1,8 +1,9 @@
 """Integration tests against the real DeepSeek API.
 
-Skipped unless IMPERIAL_LLM_API_KEY / DEEPSEEK_API_KEY is set. These are
-expensive and non-deterministic — never part of the default suite.
-Run explicitly:  IMPERIAL_LLM_API_KEY=... pytest tests/test_llm_integration.py -v
+Skipped unless IMPERIAL_LLM_TEST=1 is set (never part of the default suite —
+they hit the real API and cost tokens). The backend/.env file is NOT loaded
+here; pass the key explicitly:
+    IMPERIAL_LLM_TEST=1 IMPERIAL_LLM_API_KEY=... pytest tests/test_llm_integration.py -v
 """
 import os
 
@@ -11,8 +12,8 @@ import pytest
 from imperial.agent.llm_client import LLMClient, LLMError
 
 pytestmark = pytest.mark.skipif(
-    not (os.environ.get("IMPERIAL_LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")),
-    reason="no LLM API key configured",
+    os.environ.get("IMPERIAL_LLM_TEST") != "1",
+    reason="integration tests need IMPERIAL_LLM_TEST=1 to run",
 )
 
 

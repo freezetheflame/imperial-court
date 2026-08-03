@@ -12,7 +12,7 @@ from imperial.api.main import create_app
 
 @pytest.fixture
 def client(tmp_path):
-    app = create_app(db_path=tmp_path / "api.db", seed_posts=True)
+    app = create_app(db_path=tmp_path / "api.db", seed_posts=True, load_env_file=False)
     return TestClient(app)
 
 
@@ -22,6 +22,7 @@ def test_health(client):
     data = r.json()
     assert data["institution"] == "sanguan-jiuqing"
     assert data["posts"] == 8
+    assert "scheduler" in data  # agent-network flag present (off in tests: no LLM key)
 
 
 def test_posts_seeded(client):

@@ -4,6 +4,7 @@ Run:  uvicorn imperial.api.main:app --reload
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from imperial.api.bootstrap import AppContext, build_context
+from imperial.api.env import load_env
 from imperial.api.events import EventBroadcaster
 from imperial.api import routes
 
@@ -21,12 +23,17 @@ def create_app(
     db_path: Path | str | None = None,
     institution_path: Path | str | None = None,
     seed_posts: bool = True,
+    enable_scheduler: bool | None = None,
+    load_env_file: bool = True,
 ) -> FastAPI:
+    if load_env_file:
+        load_env()  # backend/.env → os.environ (no-op if absent)
     backend_root = Path(__file__).resolve().parent.parent.parent  # backend/
     ctx = build_context(
         db_path=db_path,
         institution_path=institution_path or backend_root / "institutions" / "sanguan-jiuqing.yaml",
         seed_posts=seed_posts,
+        enable_scheduler=enable_scheduler,
     )
     broadcaster = EventBroadcaster()
     routes.bind(ctx, broadcaster)
@@ -41,6 +48,23 @@ def create_app(
     app.state.ctx = ctx
     app.include_router(routes.router)
 
+    # ── agent network lifecycle ────────────────────────────
+    _pump_task: asyncio.Task | None = None
+
+    @app.on_event("startup")
+    async def _start_scheduler() -> None:
+        nonlocal _pump_task
+        if ctx.scheduler is not None:
+            await ctx.scheduler.start()
+            _pump_task = asyncio.create_task(ctx.scheduler.pump())
+
+    @app.on_event("shutdown")
+    async def _stop_scheduler() -> None:
+        nonlocal _pump_task
+        if _pump_task is not None:
+            _pump_task.cancel()
+            _pump_task = None
+
     @app.get("/api/events/stream")
     async def event_stream(request: Request) -> StreamingResponse:
         async def gen():
@@ -53,7 +77,12 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "institution": ctx.institution.id, "posts": len(ctx.institution.posts)}
+        return {
+            "status": "ok",
+            "institution": ctx.institution.id,
+            "posts": len(ctx.institution.posts),
+            "scheduler": ctx.scheduler is not None,
+        }
 
     return app
 

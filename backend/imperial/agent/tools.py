@@ -16,6 +16,7 @@ from imperial.bus import Bus
 from imperial.court.appointments import AppointmentService
 from imperial.court.memorials import MemorialService
 from imperial.storage import Storage
+from imperial.agent.tracker import TaskTracker
 
 JSON_OBJ = {"type": "object", "properties": {}, "additionalProperties": True}
 STR_PROP = {"type": "string"}
@@ -27,8 +28,10 @@ def build_tools(
     storage: Storage,
     memorials: MemorialService,
     appointments: AppointmentService,
+    tracker: TaskTracker | None = None,
 ) -> ToolRegistry:
     reg = ToolRegistry()
+    tracker = tracker or TaskTracker()
 
     # ── coordinator tools (chancery) ───────────────────────
     @reg.register(
@@ -65,6 +68,8 @@ def build_tools(
         },
     )
     async def dispatch_task(edict_id: str, target: str, title: str, description: str) -> dict[str, Any]:
+        # register the subtask for aggregation (per-post granularity)
+        tracker.register_subtask(edict_id, target, target, title)
         ok, decision = await bus.post_message(
             "chancery", target, "task_assignment",
             payload={"edict_id": edict_id, "title": title, "description": description},
@@ -104,6 +109,13 @@ def build_tools(
             frm, "chancery", "result",
             payload={"edict_id": edict_id, "summary": summary, "detail": detail},
         )
+        # mark this post's subtask complete (key matches dispatch: per-post)
+        done = tracker.complete_subtask(edict_id, frm, summary)
+        if done:
+            # all subtasks done → fire the aggregate callback (may be async)
+            from imperial.agent.tracker import fire_async
+
+            await fire_async(tracker, edict_id)
         return {"reported": ok, "reason": decision.reason if decision is not None else None}
 
     @reg.register(
