@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" role="img" aria-label="朝堂运转流程">
+  <defs>
+    <linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff6da"/>
+      <stop offset="100%" stop-color="#f0ddb2"/>
+    </linearGradient>
+    <linearGradient id="boxred" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a53028"/>
+      <stop offset="100%" stop-color="#7e1c16"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 Z" fill="#8b1a1a"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="330" rx="14" fill="#170b0a"/>
+  <rect x="8" y="8" width="884" height="314" rx="12" fill="none" stroke="#b9802b55" stroke-width="2"/>
+
+  <!-- 皇帝 -->
+  <g>
+    <rect x="30" y="30" width="150" height="62" rx="10" fill="url(#boxred)" stroke="#d4a84a" stroke-width="2.5"/>
+    <text x="105" y="57" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#f4d98f">👑 皇帝</text>
+    <text x="105" y="78" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#e8c98a">下达上谕 · 朱批裁决</text>
+  </g>
+
+  <!-- 丞相 -->
+  <g>
+    <rect x="250" y="30" width="150" height="62" rx="10" fill="url(#box)" stroke="#b9802b" stroke-width="2"/>
+    <text x="325" y="57" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#4a1a16">🏛 丞相</text>
+    <text x="325" y="78" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#6b4c2d">拆解 · 分派 · 汇总</text>
+  </g>
+
+  <!-- 执行岗 -->
+  <g>
+    <rect x="250" y="160" width="150" height="62" rx="10" fill="url(#box)" stroke="#b9802b" stroke-width="2"/>
+    <text x="325" y="187" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#4a1a16">📋 执行岗</text>
+    <text x="325" y="208" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#6b4c2d">治粟内史 · 廷尉 · 典客</text>
+  </g>
+
+  <!-- 御史台 -->
+  <g>
+    <rect x="470" y="30" width="150" height="62" rx="10" fill="url(#box)" stroke="#b9802b" stroke-width="2"/>
+    <text x="545" y="57" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#4a1a16">⚖️ 御史台</text>
+    <text x="545" y="78" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#6b4c2d">监察 · 弹劾 · 直奏</text>
+  </g>
+
+  <!-- 规则引擎 -->
+  <g>
+    <rect x="470" y="160" width="150" height="62" rx="10" fill="url(#box)" stroke="#b9802b" stroke-width="2"/>
+    <text x="545" y="187" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#4a1a16">🛡 规则引擎</text>
+    <text x="545" y="208" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#6b4c2d">白名单 · 状态机 · 拦截</text>
+  </g>
+
+  <!-- 事件史册 -->
+  <g>
+    <rect x="690" y="95" width="170" height="62" rx="10" fill="url(#box)" stroke="#b9802b" stroke-width="2"/>
+    <text x="775" y="122" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="19" fill="#4a1a16">📜 史册</text>
+    <text x="775" y="143" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="12" fill="#6b4c2d">全量事件 · 审计溯源</text>
+  </g>
+
+  <!-- 箭头 -->
+  <g stroke="#8b1a1a" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+    <line x1="180" y1="61" x2="244" y2="61"/>
+    <path d="M325 92 C325 120 325 130 325 154"/>
+    <path d="M400 61 C430 61 440 61 464 61"/>
+    <path d="M545 92 L545 154"/>
+    <path d="M325 191 L620 191" stroke-dasharray="6 4"/>
+    <line x1="620" y1="191" x2="684" y2="143"/>
+    <line x1="620" y1="61" x2="684" y2="100"/>
+  </g>
+
+  <!-- 标注 -->
+  <text x="212" y="50" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">上谕</text>
+  <text x="325" y="128" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">分派任务</text>
+  <text x="432" y="50" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">奏报/弹劾</text>
+  <text x="556" y="138" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">裁定越权</text>
+  <text x="470" y="180" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">回报 → 汇总</text>
+  <text x="668" y="115" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">审计</text>
+  <text x="668" y="78" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="11" fill="#c9a45a">直奏</text>
+</svg>

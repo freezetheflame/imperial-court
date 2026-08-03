@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-label="Imperial Court 朝堂">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a0a06"/>
+      <stop offset="45%" stop-color="#3b1712"/>
+      <stop offset="100%" stop-color="#8b1a1a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4d98f"/>
+      <stop offset="100%" stop-color="#a67c00"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ffd9a066"/>
+      <stop offset="100%" stop-color="#00000000"/>
+    </radialGradient>
+    <pattern id="columns" width="90" height="100%" patternUnits="userSpaceOnUse">
+      <rect x="10" y="0" width="14" height="100%" fill="#2a0c09" opacity=".5"/>
+      <rect x="12" y="0" width="10" height="100%" fill="#6f281d" opacity=".35"/>
+    </pattern>
+  </defs>
+
+  <!-- 背景大殿 -->
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <rect width="1200" height="320" fill="url(#columns)"/>
+  <rect width="1200" height="320" fill="url(#glow)"/>
+
+  <!-- 屋檐 -->
+  <path d="M120 60 L1080 60 L1140 110 L60 110 Z" fill="#1c0a07"/>
+  <path d="M60 110 L1140 110 L1110 130 L90 130 Z" fill="#4a1c12"/>
+  <path d="M90 130 L1110 130 L1090 144 L110 144 Z" fill="#8a4726"/>
+
+  <!-- 立柱（透视） -->
+  <rect x="100" y="144" width="26" height="150" fill="#5b2318"/>
+  <rect x="120" y="144" width="8" height="150" fill="#260c09"/>
+  <rect x="1074" y="144" width="26" height="150" fill="#5b2318"/>
+  <rect x="1074" y="144" width="8" height="150" fill="#260c09"/>
+
+  <!-- 标题 -->
+  <text x="600" y="150" text-anchor="middle" font-family="'Noto Serif SC','Songti SC',serif" font-size="92" letter-spacing="26" fill="url(#gold)" font-weight="bold" filter="drop-shadow(0 6px 12px rgba(0,0,0,.7))">朝堂</text>
+  <text x="600" y="205" text-anchor="middle" font-family="'Noto Serif SC','Songti SC',serif" font-size="30" letter-spacing="14" fill="#c9a45a" opacity=".9">IMPERIAL COURT</text>
+  <text x="600" y="245" text-anchor="middle" font-family="'Noto Serif SC',serif" font-size="17" letter-spacing="6" fill="#bba982">制度为一等公民的多智能体编排系统</text>
+
+  <!-- 印章 -->
+  <g transform="translate(1005,235)">
+    <rect x="-38" y="-38" width="76" height="76" fill="none" stroke="#c0392b" stroke-width="4" opacity=".85"/>
+    <rect x="-30" y="-30" width="60" height="60" fill="none" stroke="#c0392b" stroke-width="1.5" opacity=".7"/>
+    <text x="0" y="-4" text-anchor="middle" font-family="'Kaiti SC','KaiTi',serif" font-size="15" fill="#c0392b">奉天</text>
+    <text x="0" y="16" text-anchor="middle" font-family="'Kaiti SC','KaiTi',serif" font-size="15" fill="#c0392b">承运</text>
+  </g>
+
+  <!-- 香炉 -->
+  <g transform="translate(170,250)">
+    <ellipse cx="0" cy="-16" rx="26" ry="8" fill="none" stroke="#a67c3d" stroke-width="2.5"/>
+    <rect x="-16" y="-12" width="32" height="20" rx="4" fill="#38251d" stroke="#a67c3d" stroke-width="2"/>
+    <rect x="-24" y="8" width="48" height="7" fill="#38251d" stroke="#a67c3d" stroke-width="2"/>
+    <circle cx="0" cy="26" r="5" fill="#a67c3d"/>
+    <line x1="-2" y1="-26" x2="-2" y2="-52" stroke="#d5c6ab" stroke-width="2" opacity=".5" stroke-dasharray="3 4"/>
+    <line x1="3" y1="-26" x2="6" y2="-60" stroke="#d5c6ab" stroke-width="2" opacity=".35" stroke-dasharray="3 4"/>
+  </g>
+
+  <!-- 祥云 -->
+  <g fill="#e8d29d" opacity=".35">
+    <circle cx="255" cy="95" r="14"/><circle cx="272" cy="88" r="10"/><circle cx="288" cy="97" r="12"/>
+    <circle cx="920" cy="88" r="13"/><circle cx="938" cy="80" r="9"/><circle cx="953" cy="90" r="11"/>
+  </g>
+</svg>
