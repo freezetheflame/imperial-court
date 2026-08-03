@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: imperial-court
+Version: 0.1.0
+Summary: 制度是一等公民的多 agent 编排系统 — 古代政治制度作为可换装的编排层
+Requires-Python: >=3.10
+Requires-Dist: pyyaml>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
