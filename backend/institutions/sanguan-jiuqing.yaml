@@ -21,7 +21,7 @@ institution:
         - inquire_progress    # 催办
         - summarize           # 汇总结果上奏
         - query_events        # 查事件流（了解全局）
-      model: pro              # 丞相用 pro 模型（发布前 flash 顶替）
+      model: deepseek-v4-flash  # 丞相用 pro（发布后改 deepseek-v4-pro）
 
     - id: grand_commandant    # 太尉
       title: 太尉
@@ -42,7 +42,7 @@ institution:
         - draft_impeachment   # 起草弹劾奏章
         - issue_warning       # 留任警告（自决）
         - recommend_removal   # 建议革职（需朱批）
-      model: pro              # 主审也用 pro（判断质量关键）
+      model: deepseek-v4-flash  # 主审也用 pro（发布后改 deepseek-v4-pro）
 
     - id: censor_assistant    # 御史（助手）
       title: 御史

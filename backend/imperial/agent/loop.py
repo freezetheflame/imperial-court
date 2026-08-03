@@ -73,12 +73,19 @@ class AgentLoop:
         llm: LLMClient,
         engine: RuleEngine | None = None,
         max_turns: int = 8,
+        auditor: Any | None = None,  # callable(post_id, tool, allowed, reason, error=None)
     ):
         self.institution = institution
         self.tools = tools
         self.llm = llm
         self.engine = engine or RuleEngine(institution)
         self.max_turns = max_turns
+        self.auditor = auditor
+
+    def _audit_tool(self, post_id: str, tool: str, allowed: bool, reason: str, error: str | None = None) -> None:
+        if self.auditor is None:
+            return
+        self.auditor(post_id, tool, allowed, reason, error=error)
 
     async def run(
         self,
@@ -101,11 +108,13 @@ class AgentLoop:
             if not resp.tool_calls:
                 return AgentRunResult(content=resp.content or "", tool_calls=tool_calls, turns=len(tool_calls) + 1)
 
+            # one assistant message carrying ALL tool calls + reasoning trace
+            messages.append(self._assistant_msg(resp))
+
             for tc in resp.tool_calls:
                 if not self.tools.has(tc.name):
                     record = ToolCallRecord(tc.name, tc.arguments, False, f"unknown tool: {tc.name}")
                     tool_calls.append(record)
-                    messages.append({"role": "assistant", "content": None, "tool_calls": [self._tc_msg(tc)]})
                     messages.append(
                         {
                             "role": "tool",
@@ -119,7 +128,6 @@ class AgentLoop:
                 if not decision.allowed:
                     record = ToolCallRecord(tc.name, tc.arguments, False, decision.reason)
                     tool_calls.append(record)
-                    messages.append({"role": "assistant", "content": None, "tool_calls": [self._tc_msg(tc)]})
                     messages.append(
                         {
                             "role": "tool",
@@ -132,10 +140,11 @@ class AgentLoop:
                 try:
                     result = await self.tools.execute(tc.name, tc.arguments, _post_id=post_id)
                     record = ToolCallRecord(tc.name, tc.arguments, True, "allowed", result)
+                    self._audit_tool(post_id, tc.name, True, "allowed")
                 except Exception as e:  # noqa: BLE001 — tool errors are data for the LLM
                     record = ToolCallRecord(tc.name, tc.arguments, True, "allowed", {"error": str(e)})
+                    self._audit_tool(post_id, tc.name, True, "allowed", error=str(e))
                 tool_calls.append(record)
-                messages.append({"role": "assistant", "content": None, "tool_calls": [self._tc_msg(tc)]})
                 messages.append(
                     {
                         "role": "tool",
@@ -178,3 +187,15 @@ class AgentLoop:
                 "arguments": json.dumps(tc.arguments, ensure_ascii=False),
             },
         }
+
+    @staticmethod
+    def _assistant_msg(resp: LLMResponse) -> dict[str, Any]:
+        """Assistant message that carries tool_calls AND DeepSeek reasoning."""
+        msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": resp.content,
+            "tool_calls": [AgentLoop._tc_msg(tc) for tc in resp.tool_calls],
+        }
+        if resp.reasoning_content:
+            msg["reasoning_content"] = resp.reasoning_content
+        return msg

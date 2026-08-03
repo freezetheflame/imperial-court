@@ -29,6 +29,7 @@ class LLMResponse:
     tool_calls: list[LLMToolCall] = field(default_factory=list)
     finish_reason: str | None = None
     model: str | None = None
+    reasoning_content: str | None = None  # DeepSeek thinking-mode trace
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -108,6 +109,7 @@ class LLMClient:
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             model=resp.model,
+            reasoning_content=getattr(msg, "reasoning_content", None),
             raw=resp.model_dump(),
         )
 
