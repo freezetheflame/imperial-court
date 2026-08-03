@@ -121,10 +121,21 @@
 | 文档 | 说明 |
 |---|---|
 | [需求基线](docs/requirements.md) | grill-me 确认的全部决策（23 项） |
-| [架构设计](docs/architecture.md) | 分层、深模块、表结构、流程 |
+| [架构总览](docs/architecture.md) | 分层、深模块、表结构、流程 |
 | [API 契约](docs/api-contract.md) | 前端开发契约（7 组端点 + SSE） |
 | [前端设计指令](docs/frontend-design-brief.md) | 沉浸式 UI 设计规范 |
 | [金銮殿 Spec](docs/frontend-throne-spec.md) | 场景化交互设计（v2） |
+
+**分模块架构文档**（docs/arch/）：
+
+| 文档 | 覆盖 |
+|---|---|
+| [Agent 架构](docs/arch/agent-architecture.md) | 薄循环 / LLMClient / 工具注册表 / 审计 |
+| [组织架构](docs/arch/organization-architecture.md) | 制度-as-数据 / 岗位体系 / 权力制衡 / 人格画像 |
+| [调度架构](docs/arch/scheduler-architecture.md) | 消息驱动网络 / single-flight / 多任务聚合 |
+| [规则引擎架构](docs/arch/rule-engine-architecture.md) | 静态查表 + 动态策略 / 铁律与 LLM 的边界 |
+| [通信总线架构](docs/arch/bus-architecture.md) | 路由校验 / 审计 / 违制上报 |
+| [前端架构](docs/arch/frontend-architecture.md) | 场景组件树 / SSE 流 / 呈奏状态机 |
 
 ---
 
