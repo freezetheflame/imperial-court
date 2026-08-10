@@ -15,13 +15,13 @@ export function ThroneHall() {
   const { data: edicts } = useQuery({ queryKey: ["edicts"], queryFn: () => api.listEdicts(), refetchInterval: 5000 });
   const memorials = memorialData ?? [];
   const pending = useMemo(() => memorials.filter(m => m.status === "submitted"), [memorials]);
-  // most recent edict that isn't yet fully done (its memorial may or may not exist)
   const activeEdict = useMemo(() => edicts?.[0] ?? null, [edicts]);
   const knownIds = useRef<Set<string> | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stage, setStage] = useState<PresentationStage>("idle");
   const [isCeremonial, setIsCeremonial] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
+  const [vista, setVista] = useState(false);
   const selected = memorials.find(m => m.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -56,18 +56,19 @@ export function ThroneHall() {
   function openMemorial(m: Memorial) { setSelectedId(m.id); setIsCeremonial(false); setStage("idle"); setShowDrawer(false); }
 
   return <section className="throne-hall" aria-label="金銮殿">
-    <div className="hall-ceiling"><div className="plaque">正大光明</div></div>
-    <div className="hall-columns left"><i /><i /><i /></div><div className="hall-columns right"><i /><i /><i /></div>
-    <div className="distant-doors"><span /><span /></div>
-    <div className="hall-floor"><div className="imperial-way" /></div>
-    <div className="dais"><span>丹陛</span></div>
-    <div className="incense-burner"><i /><span /><b /></div>
-    <div className="candle left"><i /></div><div className="candle right"><i /></div>
+    <div className={`hall-vista${vista ? " open" : ""}`} aria-hidden={!vista}>
+      <div className="vista-caption"><span>临轩远眺</span><p>丹墀之外，江山如画</p></div>
+      <button className="vista-return" onClick={() => setVista(false)} aria-label="返回大殿">回銮</button>
+    </div>
+
+    <div className="hall-light" aria-hidden="true" />
     <div className="hall-title"><span>奉天承运</span><h1>朕临金銮殿</h1><p>{isLoading ? "内侍正在点检奏章……" : pending.length ? `御案尚有 ${pending.length} 封奏折待批` : "四海清平，殿上暂无急奏"}</p></div>
 
     {activeEdict && <div className="hall-progress-slot"><CourtProgressPanel edictId={activeEdict.id} title={activeEdict.title} /></div>}
 
     <ChancellorArrival stage={stage} onSkip={() => setStage("presented")} />
+
+    <button className="vista-token" onClick={() => setVista(true)} aria-label="临轩远眺，观殿外江山"><small>远眺</small>殿外江山</button>
 
     <div className="throne-actions">
       <NavLink to="/censorate" className="command-token"><small>移驾</small>御史台</NavLink>
