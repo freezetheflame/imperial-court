@@ -31,7 +31,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .jade-nav:hover, .jade-nav.active { color: #ffe8aa; border-color: #b78c3655; background: #7f1c1766; }
 .jade-nav.active::before { left: 20%; width: 60%; }
 .scene-stage { min-height: 100vh; animation: sceneEnter .55s cubic-bezier(.2,.75,.25,1); }
-@keyframes sceneEnter { from { opacity: 0; transform: scale(.985) translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes sceneEnter { from { opacity: 0; } to { opacity: 1; } }
 
 /* throne hall — photo is the protagonist; CSS only adds light & atmosphere */
 .throne-hall { position: relative; isolation: isolate; min-height: 100vh; overflow: hidden; color: #f1dbab; background: url("/src/assets/hall-interior.jpg") center 42% / cover no-repeat, #1a0d08; }
