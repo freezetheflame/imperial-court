@@ -66,7 +66,8 @@ class EdictService:
         self.bus = bus
 
     async def issue(self, form: EdictForm) -> dict[str, Any]:
-        """Issue an edict: persist, render formal text, deliver to chancery."""
+        """Issue an edict: persist, render formal text, deliver to the decree
+        workflow's first post (defined by the institution, not hardcoded)."""
         edict_id = f"edict_{uuid.uuid4().hex[:8]}"
         formal = render_formal_edict(form)
         self.storage.execute(
@@ -75,8 +76,9 @@ class EdictService:
         )
         self.storage.insert_event("edict", None, {"edict_id": edict_id, "title": form.title})
 
+        wf = self.bus.institution.workflow("decree")
         ok, decision = await self.bus.post_message(
-            "emperor", "chancery", "edict",
+            wf.entry_from, wf.entry_to, wf.entry_type,
             payload={"edict_id": edict_id, "title": form.title, "form": form.as_dict()},
         )
         if not ok:

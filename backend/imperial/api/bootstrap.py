@@ -27,6 +27,7 @@ from imperial.court.memorials import MemorialService
 from imperial.institution import Institution, load_institution
 from imperial.rule_engine import RuleEngine
 from imperial.storage import Storage
+from imperial.workflow import WorkflowEngine
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # backend/
 DEFAULT_INSTITUTION = BACKEND_ROOT / "institutions" / "sanguan-jiuqing.yaml"
@@ -84,6 +85,7 @@ class AppContext:
     tools: Any
     tracker: TaskTracker
     personas: PersonaService
+    workflow: WorkflowEngine | None = None
     scheduler: AgentScheduler | None = None
 
     def make_loop(self, llm: LLMClient | None = None) -> AgentLoop:
@@ -134,9 +136,13 @@ def build_context(
     impeachments = ImpeachmentService(storage, bus, appointments)
     edicts = EdictService(storage, bus)
     tracker = TaskTracker()
+    workflow = WorkflowEngine(
+        institution=institution, bus=bus, memorials=memorials,
+        edicts=edicts, tracker=tracker,
+    )
     tools = build_tools(
         bus=bus, storage=storage, memorials=memorials, appointments=appointments,
-        tracker=tracker,
+        tracker=tracker, engine=workflow,
     )
 
     if seed_posts:
@@ -163,13 +169,14 @@ def build_context(
         scheduler = AgentScheduler(
             institution=institution, bus=bus, memorials=memorials,
             loop_factory=loop_factory, tracker=tracker, edicts=edicts,
+            engine=workflow,
         )
 
     return AppContext(
         storage=storage, institution=institution, engine=engine, bus=bus,
         appointments=appointments, memorials=memorials, impeachments=impeachments,
         edicts=edicts, tools=tools, tracker=tracker, personas=personas,
-        scheduler=scheduler,
+        workflow=workflow, scheduler=scheduler,
     )
 
 

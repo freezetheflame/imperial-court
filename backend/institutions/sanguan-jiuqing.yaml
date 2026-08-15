@@ -149,6 +149,50 @@ institution:
       to: censor
       type: [violation_record]
 
+  # ── 角色职责描述（prompt 数据化，随制度换装）─────────────
+  role_descriptions:
+    coordinator: 你是丞相，百官之首。承接皇帝上谕，拆解为子任务，分派执行岗，收集回报后汇总上奏。
+    executor: 你是执行岗。收到丞相分派后执行，完成后向丞相呈报结果。
+    inspector: 你是御史大夫，执掌监察。收到违制记录后查证，轻微留任警告，严重建议革职直奏。
+    inspector_assistant: 你是御史，御史大夫的助手。受命取证，向御史大夫呈报调查简报。
+    external: 你是太尉，掌对外联络。处理对外事务，完成后向丞相呈报。
+
+  # ── 政务流水线（制度驱动，换制度=换流程）────────────────
+  workflows:
+    decree:
+      entry:
+        from: emperor
+        to: chancery
+        type: edict
+      stages:
+        - id: dispatch
+          post: chancery
+          capability: dispatch
+          fanout:
+            to: [finance, justice, relations, internal, grand_commandant]
+            type: task_assignment
+        - id: execute
+          posts: [finance, justice, relations, internal, grand_commandant]
+          capability: execute
+          report_to: chancery
+        - id: aggregate
+          post: chancery
+          capability: aggregate
+          terminal:
+            type: memorial
+    inspection:
+      entry:
+        from: system
+        to: censor
+        type: violation_record
+      stages:
+        - id: investigate
+          post: censor
+          capability: inspect
+          terminal:
+            type: impeachment
+            on_tool: recommend_removal
+
   # ── 奏折状态机（全局）─────────────────────────────────
   memorial_state_machine:
     states: [submitted, read, approved, rejected, held, returned, archived]

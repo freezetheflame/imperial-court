@@ -99,15 +99,16 @@ class Bus:
         return True, decision
 
     async def _forward_violation(self, frm: str, to: str, msg_type: str, decision: RuleDecision) -> None:
-        """Notify the censorate of an attempted violation."""
-        if not self.institution.has_post("censor"):
+        """Notify the inspection workflow's entry post of an attempted violation."""
+        insp = self.institution.workflows.get("inspection")
+        if insp is None:
             return
         await self._deliver_raw(
             Message(
                 id=f"msg_{uuid.uuid4().hex[:12]}",
                 frm="system",
-                to="censor",
-                type="violation_record",
+                to=insp.entry_to,
+                type=insp.entry_type,
                 payload={
                     "attempted_from": frm,
                     "attempted_to": to,

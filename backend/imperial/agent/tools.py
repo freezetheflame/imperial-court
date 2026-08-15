@@ -12,11 +12,12 @@ from __future__ import annotations
 from typing import Any
 
 from imperial.agent.tool_registry import ToolRegistry
+from imperial.agent.tracker import TaskTracker
 from imperial.bus import Bus
 from imperial.court.appointments import AppointmentService
 from imperial.court.memorials import MemorialService
 from imperial.storage import Storage
-from imperial.agent.tracker import TaskTracker
+from imperial.workflow import WorkflowEngine
 
 JSON_OBJ = {"type": "object", "properties": {}, "additionalProperties": True}
 STR_PROP = {"type": "string"}
@@ -29,9 +30,13 @@ def build_tools(
     memorials: MemorialService,
     appointments: AppointmentService,
     tracker: TaskTracker | None = None,
+    engine: WorkflowEngine | None = None,
 ) -> ToolRegistry:
     reg = ToolRegistry()
     tracker = tracker or TaskTracker()
+    engine = engine or WorkflowEngine(
+        institution=bus.institution, bus=bus, memorials=memorials, tracker=tracker,
+    )
 
     # ── coordinator tools (chancery) ───────────────────────
     @reg.register(
@@ -49,8 +54,8 @@ def build_tools(
             "required": ["edict_id", "subtasks"],
         },
     )
-    def decompose_task(edict_id: str, subtasks: list[dict[str, Any]]) -> dict[str, Any]:
-        storage.insert_event("decompose", "chancery", {"edict_id": edict_id, "subtasks": subtasks})
+    def decompose_task(edict_id: str, subtasks: list[dict[str, Any]], _post_id: str | None = None) -> dict[str, Any]:
+        storage.insert_event("decompose", _post_id or engine.dispatch_post(), {"edict_id": edict_id, "subtasks": subtasks})
         return {"edict_id": edict_id, "subtasks": subtasks}
 
     @reg.register(
@@ -67,11 +72,15 @@ def build_tools(
             "required": ["edict_id", "target", "title", "description"],
         },
     )
-    async def dispatch_task(edict_id: str, target: str, title: str, description: str) -> dict[str, Any]:
-        # register the subtask for aggregation (per-post granularity)
+    async def dispatch_task(edict_id: str, target: str, title: str, description: str, _post_id: str | None = None) -> dict[str, Any]:
+        # constrain dispatch targets to the workflow's fan-out
+        fanout = engine.dispatch_fanout()
+        if target not in fanout.to:
+            return {"dispatched": False, "target": target, "reason": f"{target} 不在本制度分派范围"}
         tracker.register_subtask(edict_id, target, target, title)
+        frm = _post_id or engine.dispatch_post()
         ok, decision = await bus.post_message(
-            "chancery", target, "task_assignment",
+            frm, target, fanout.type,
             payload={"edict_id": edict_id, "title": title, "description": description},
         )
         return {
@@ -105,8 +114,9 @@ def build_tools(
     async def report_result(edict_id: str, summary: str, detail: str | None = None, _post_id: str | None = None) -> dict[str, Any]:
         # _post_id injected by AgentLoop from the post's identity
         frm = _post_id or "finance"
+        report_to = engine.report_target()
         ok, decision = await bus.post_message(
-            frm, "chancery", "result",
+            frm, report_to, "result",
             payload={"edict_id": edict_id, "summary": summary, "detail": detail},
         )
         # mark this post's subtask complete (key matches dispatch: per-post)
@@ -141,6 +151,43 @@ def build_tools(
     )
     def compose_message(audience: str, content: str) -> dict[str, Any]:
         return {"audience": audience, "content": content}
+
+    # ── draft / review tools (三省六部式 workflow) ─────────
+    @reg.register(
+        "submit_draft",
+        "将草拟好的诏书文本送门下省审核（中书起草环节推进）",
+        {
+            "type": "object",
+            "properties": {"edict_id": STR_PROP, "draft_text": STR_PROP},
+            "required": ["edict_id", "draft_text"],
+        },
+    )
+    async def submit_draft(edict_id: str, draft_text: str, _post_id: str | None = None) -> dict[str, Any]:
+        return await engine.submit_draft(edict_id, draft_text, _post_id or "")
+
+    @reg.register(
+        "approve",
+        "审核通过诏书，放行给尚书省执行（门下放行）",
+        {
+            "type": "object",
+            "properties": {"edict_id": STR_PROP, "reason": STR_PROP},
+            "required": ["edict_id"],
+        },
+    )
+    async def approve(edict_id: str, reason: str | None = None, _post_id: str | None = None) -> dict[str, Any]:
+        return await engine.approve(edict_id, reason or "", _post_id or "")
+
+    @reg.register(
+        "veto",
+        "封驳诏书，打回中书省重拟（附封驳理由）",
+        {
+            "type": "object",
+            "properties": {"edict_id": STR_PROP, "reason": STR_PROP},
+            "required": ["edict_id", "reason"],
+        },
+    )
+    async def veto(edict_id: str, reason: str, _post_id: str | None = None) -> dict[str, Any]:
+        return await engine.veto(edict_id, reason, _post_id or "")
 
     # ── shared / inspector tools ───────────────────────────
     @reg.register(

@@ -5,13 +5,16 @@ arrives, the worker hands it to AgentLoop as a task; the loop's tool calls
 (dispatch/report) flow back through the bus to other posts' inboxes, so a
 single edict fans out into a full court process.
 
+The *workflow* (which post dispatches, which executors report to whom, who
+aggregates, who memorializes) is data, not code: the WorkflowEngine reads it
+from the institution YAML. The scheduler only runs agents and hands each
+finished run back to the engine to route the next step.
+
 Design notes:
 - Workers are single-flight per post: while a post's agent is running, new
   messages queue in its inbox and are processed on the next pump.
-- The scheduler is async and driven by an explicit `pump()`; tests drive it
+- The scheduler is async and driven by an explicit pump(); tests drive it
   with pump_once(), production with a background task.
-- Messages that are *results of the agent's own tools* are not re-fed to the
-  same agent (the loop already saw the tool result inline).
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ from imperial.agent.prompts import build_system_prompt
 from imperial.bus import Bus, Message
 from imperial.court.memorials import MemorialService
 from imperial.institution import Institution
+from imperial.workflow import WorkflowEngine
 
 
 class AgentScheduler:
@@ -38,6 +42,7 @@ class AgentScheduler:
         posts: list[str] | None = None,
         tracker: Any | None = None,  # TaskTracker shared with tools
         edicts: Any | None = None,  # EdictService — persists completion
+        engine: WorkflowEngine | None = None,
     ):
         self.institution = institution
         self.bus = bus
@@ -49,25 +54,12 @@ class AgentScheduler:
             p.id: build_system_prompt(p.id, institution) for p in institution.posts
         }
         self._posts = posts or [p.id for p in institution.posts]
-        # multi-task aggregation: when an edict's subtasks all complete,
-        # drive the chancery to produce ONE aggregate memorial
-        from imperial.agent.tracker import TaskTracker
-
-        self.tracker = tracker or TaskTracker(on_all_complete=self._on_edict_complete)
-        # rewire callback so it fires regardless of who created the tracker
-        self.tracker.on_all_complete = self._on_edict_complete
-
-    # ── aggregation callback ──────────────────────────────
-    async def _on_edict_complete(self, edict_id: str) -> None:
-        """All subtasks of an edict are done → chancery summarizes once."""
-        prog = self.tracker.progress(edict_id)
-        summaries = prog.summaries() if prog else []
-        if self.edicts is not None:
-            self.edicts.mark_completed(edict_id)  # persist across restarts
-        await self.bus.post_message(
-            "system", "chancery", "aggregate",
-            payload={"edict_id": edict_id, "summaries": summaries},
+        # workflow engine: aggregation + terminal memorials, driven by data
+        self.engine = engine or WorkflowEngine(
+            institution=institution, bus=bus, memorials=memorials,
+            edicts=edicts, tracker=tracker,
         )
+        self.tracker = self.engine.tracker
 
     # ── wiring ─────────────────────────────────────────────
     async def start(self) -> None:
@@ -83,20 +75,10 @@ class AgentScheduler:
 
     # ── message routing ────────────────────────────────────
     async def _dispatch(self, post_id: str, msg: Message) -> None:
-        """Route an inbox message to the agent (or handle it directly)."""
-        # the censorate's violation_records become impeachment cases
-        if post_id == "censor" and msg.type == "violation_record":
-            await self._handle_violation(msg)
+        """Route an inbox message to the agent, unless the workflow says to
+        swallow it (e.g. individual results at the aggregate post)."""
+        if not self.engine.should_run(post_id, msg.type):
             return
-        # chancery aggregate: all subtasks done → summarize → ONE memorial
-        if post_id == "chancery" and msg.type == "aggregate":
-            await self._run_agent(post_id, msg)
-            return
-        # executor results accumulate at the chancery (aggregation handled
-        # by the tracker; individual results do NOT trigger a memorial)
-        if post_id == "chancery" and msg.type == "result":
-            return
-
         await self._run_agent(post_id, msg)
 
     # ── agent execution ────────────────────────────────────
@@ -111,7 +93,7 @@ class AgentScheduler:
                 loop.auditor = lambda p, t, a, r, **kw: self.bus.audit_tool_call(p, t, a, r)
             task = self._render_task(msg)
             result = await loop.run(post_id, self._system_prompts[post_id], task)
-            await self._post_agent_action(post_id, msg, result)
+            await self.engine.on_agent_done(post_id, msg, result)
         finally:
             self._running.discard(post_id)
 
@@ -121,32 +103,6 @@ class AgentScheduler:
         for k, v in payload.items():
             lines.append(f"- {k}: {v}")
         return "\n".join(lines)
-
-    async def _post_agent_action(self, post_id: str, msg: Message, result: Any) -> None:
-        """After an agent run, decide whether a memorial to the emperor is due."""
-        # chancery memorializes once, when all subtasks have aggregated.
-        if post_id == "chancery" and msg.type == "aggregate":
-            await self.memorials.submit(
-                frm="chancery",
-                content=result.content,
-                edict_id=msg.payload.get("edict_id") if msg.payload else None,
-            )
-        # censor issuing a removal recommendation → impeachment memorial
-        if post_id == "censor":
-            for tc in result.tool_calls:
-                if tc.name == "recommend_removal" and tc.allowed:
-                    await self.memorials.submit(
-                        frm="censor",
-                        content=f"弹劾{tc.arguments.get('post_id')}：{tc.arguments.get('reason', '')}",
-                        msg_type="impeachment",
-                    )
-
-    # ── direct handlers ────────────────────────────────────
-    async def _handle_violation(self, msg: Message) -> None:
-        """A violation_record lands in the censorate: open an impeachment case."""
-        p = msg.payload or {}
-        # delegate to the censor agent to investigate & recommend
-        await self._run_agent("censor", msg)
 
     # ── pump ───────────────────────────────────────────────
     async def pump_once(self) -> None:

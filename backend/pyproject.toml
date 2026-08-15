@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["imperial", "imperial.storage", "imperial.institution", "imperial.rule_engine", "imperial.bus", "imperial.agent", "imperial.court"]
+packages = ["imperial", "imperial.storage", "imperial.institution", "imperial.rule_engine", "imperial.bus", "imperial.agent", "imperial.court", "imperial.workflow"]
 
 [project]
 name = "imperial-court"

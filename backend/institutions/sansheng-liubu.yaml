@@ -1,0 +1,248 @@
+# 三省六部制（隋唐）制度定义
+# 第二套制度：中书出令 → 门下封驳 → 尚书执行 → 六部办理
+# 与三公九卿共用同一套引擎，仅制度数据不同——换制度 = 换文件。
+
+institution:
+  id: sansheng-liubu
+  name: 三省六部（隋唐）
+  version: 1.0.0
+  description: 三省分权制衡（中书草拟、门下封驳、尚书执行），六部各司其职，御史台监察直奏。
+
+  # ── 岗位定义 ──────────────────────────────────────────
+  posts:
+    # 三省
+    - id: zhongshu            # 中书省
+      title: 中书令
+      role: drafter           # 起草诏书
+      reports_to: emperor
+      tool_allowance:
+        - submit_draft        # 拟稿后送门下审核
+        - query_events
+
+    - id: menxia              # 门下省
+      title: 侍中
+      role: reviewer          # 审核封驳
+      reports_to: emperor
+      tool_allowance:
+        - approve             # 放行
+        - veto                # 封驳打回
+        - query_events
+
+    - id: shangshu            # 尚书省
+      title: 尚书令
+      role: dispatcher        # 分派执行 + 汇总上奏
+      reports_to: emperor
+      tool_allowance:
+        - dispatch_task       # 分派给六部
+        - query_events
+
+    # 六部
+    - id: libu
+      title: 吏部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    - id: hubu
+      title: 户部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    - id: lihu
+      title: 礼部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    - id: bingbu
+      title: 兵部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    - id: xingbu
+      title: 刑部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    - id: gongbu
+      title: 工部
+      role: domain_executor
+      reports_to: shangshu
+      tool_allowance: [run_task, report_result, query_events]
+
+    # 御史台
+    - id: censor              # 御史大夫
+      title: 御史大夫
+      role: inspector
+      reports_to: emperor
+      tool_allowance:
+        - query_events
+        - review_logs
+        - draft_impeachment
+        - issue_warning
+        - recommend_removal
+
+    - id: censor_assistant    # 御史（助手）
+      title: 御史
+      role: inspector_assistant
+      reports_to: censor
+      tool_allowance:
+        - query_events
+        - review_logs
+        - gather_evidence
+
+  # ── 通信协议（白名单）──────────────────────────────────
+  communication_rules:
+    # 皇帝 → 中书省：意旨（草拟诏书的起点）
+    - from: emperor
+      to: zhongshu
+      type: [decree_intent]
+
+    # 中书省 → 门下省：草拟的诏书送审
+    - from: zhongshu
+      to: menxia
+      type: [draft]
+
+    # 门下省 → 中书省：封驳打回
+    - from: menxia
+      to: zhongshu
+      type: [veto]
+
+    # 门下省 → 尚书省：审核通过的诏书颁行
+    - from: menxia
+      to: shangshu
+      type: [edict]
+
+    # 尚书省 → 六部：任务分派/催办/修正
+    - from: shangshu
+      to: [libu, hubu, lihu, bingbu, xingbu, gongbu]
+      type: [task_assignment, inquiry, correction]
+
+    # 六部 → 尚书省：结果回报
+    - from: [libu, hubu, lihu, bingbu, xingbu, gongbu]
+      to: shangshu
+      type: [report, result]
+
+    # 系统 → 尚书省：全部回报后触发汇总
+    - from: system
+      to: shangshu
+      type: [aggregate]
+
+    # 尚书省 → 皇帝：汇总奏折
+    - from: shangshu
+      to: emperor
+      type: [memorial]
+
+    # 皇帝 → 尚书省：奏折驳回重办
+    - from: emperor
+      to: shangshu
+      type: [correction]
+
+    # 御史台：特权直奏
+    - from: censor
+      to: emperor
+      type: [impeachment, memorial]
+
+    - from: emperor
+      to: censor
+      type: [verdict]
+
+    # 御史助手 ↔ 御史大夫
+    - from: censor
+      to: censor_assistant
+      type: [investigate]
+
+    - from: censor_assistant
+      to: censor
+      type: [investigation_brief, evidence]
+
+    # 总线自动产生的违制记录
+    - from: system
+      to: censor
+      type: [violation_record]
+
+  # ── 角色职责描述（prompt 数据化）───────────────────────
+  role_descriptions:
+    drafter: "你是中书令，掌诏书起草。收到皇帝意旨后拟写诏书文本，用 submit_draft 送门下省审核。你只起草，不审核、不执行。"
+    reviewer: "你是侍中，掌门下封驳。收到中书草拟的诏书后审核，合规则 approve 放行，不合规则 veto 封驳打回中书重拟，附理由。你只审核，不起草、不执行。"
+    dispatcher: "你是尚书令，掌执行。收到门下颁行的诏书后，用 dispatch_task 分派给六部，收集回报后汇总上奏皇帝。"
+    domain_executor: "你是六部之一。收到尚书省分派后办理本域事务，完成后用 report_result 呈报尚书省。只向尚书省汇报。"
+    inspector: "你是御史大夫，执掌监察。收到违制记录后查证，轻微留任警告，严重建议革职直奏。你的弹劾是特权直奏。"
+    inspector_assistant: "你是御史，御史大夫的助手。受命取证，向御史大夫呈报调查简报。"
+    external: "你是太尉，掌对外联络。处理对外事务，完成后按汇报链路呈报。"
+
+  # ── 政务流水线（制度驱动）──────────────────────────────
+  workflows:
+    decree:
+      entry:
+        from: emperor
+        to: zhongshu
+        type: decree_intent
+      max_vetoes: 3
+      stages:
+        - id: draft
+          post: zhongshu
+          capability: draft
+          next: { to: menxia, type: draft }
+        - id: review
+          post: menxia
+          capability: review
+          branches:
+            ok: { to: shangshu, type: edict }
+            veto: { to: zhongshu, type: veto }
+        - id: dispatch
+          post: shangshu
+          capability: dispatch
+          fanout:
+            to: [libu, hubu, lihu, bingbu, xingbu, gongbu]
+            type: task_assignment
+        - id: execute
+          posts: [libu, hubu, lihu, bingbu, xingbu, gongbu]
+          capability: execute
+          report_to: shangshu
+        - id: aggregate
+          post: shangshu
+          capability: aggregate
+          terminal: { type: memorial }
+    inspection:
+      entry:
+        from: system
+        to: censor
+        type: violation_record
+      stages:
+        - id: investigate
+          post: censor
+          capability: inspect
+          terminal:
+            type: impeachment
+            on_tool: recommend_removal
+
+  # ── 奏折状态机（全局）─────────────────────────────────
+  memorial_state_machine:
+    states: [submitted, read, approved, rejected, held, returned, archived]
+    transitions:
+      submitted: [read]
+      read: [approved, rejected, held, returned]
+      approved: [archived]
+      rejected: [archived]
+      held: [read]
+      returned: [read]
+      archived: []
+
+  # ── 皇帝界面展示配置 ──────────────────────────────────
+  emperor_ui:
+    posts_display:
+      - { id: zhongshu, title: 中书令, group: 三省 }
+      - { id: menxia, title: 侍中, group: 三省 }
+      - { id: shangshu, title: 尚书令, group: 三省 }
+      - { id: libu, title: 吏部, group: 六部 }
+      - { id: hubu, title: 户部, group: 六部 }
+      - { id: lihu, title: 礼部, group: 六部 }
+      - { id: bingbu, title: 兵部, group: 六部 }
+      - { id: xingbu, title: 刑部, group: 六部 }
+      - { id: gongbu, title: 工部, group: 六部 }
+      - { id: censor, title: 御史大夫, group: 御史台 }
+    memorial_verdicts: [approved, rejected, held, returned]

@@ -109,10 +109,10 @@ class MemorialService:
             {"memorial_id": memorial_id, "verdict": verdict, "comment": comment},
         )
 
-        # rejected / returned → tell the chancery to re-plan (emperor → chancery)
+        # rejected / returned → tell the memorial's author to re-plan
         if verdict in ("rejected", "returned"):
             await self.bus.post_message(
-                "emperor", "chancery", "correction",
+                "emperor", mem["from_post"], "correction",
                 payload={
                     "memorial_id": memorial_id,
                     "verdict": verdict,
