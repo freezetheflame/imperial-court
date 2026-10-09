@@ -11,7 +11,7 @@
   <a href="#核心特性"><img src="https://img.shields.io/badge/特性-9个-blueviolet" alt="features"></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/后端-FastAPI+-e53935" alt="backend"></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/前端-React%2019-61dafb" alt="frontend"></a>
-  <a href="#测试"><img src="https://img.shields.io/badge/测试-67%20passed-4caf50" alt="tests"></a>
+  <a href="#测试"><img src="https://img.shields.io/badge/测试-102%20passed-4caf50" alt="tests"></a>
   <a href="#真实运行效果"><img src="https://img.shields.io/badge/LLM-DeepSeek-6772e5" alt="llm"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/许可-MIT-8b1a1a" alt="license"></a>
 </p>
@@ -193,7 +193,7 @@ cd backend
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/     # 67 passed + 3 skipped（需真 key 的 integration）
+.venv/bin/python -m pytest tests/     # 102 passed + 3 skipped（需真 key 的 integration）
 ```
 
 | 层 | 覆盖 |
@@ -214,25 +214,29 @@ cd backend
 ## 🗺 未来改进方向
 
 ### ⚖️ 治理机制
+- [x] **动态权限**：革职出缺即职权中止——规则引擎按岗位状态拒绝 tool call 与发信，调度器永不运行空缺岗位
+- [x] **降职/调任**：`transfer`/`demote` 移动现任 agent（含人格画像），原岗出缺；`POST /api/posts/{id}/transfer`
 - [ ] **权限矩阵（C 层）**：越权控制演进为完整权限矩阵——岗位 × 动作 × 资源 三层拦截，数据层访问也受控
-- [ ] **降职/调任**：职位变动扩展，支持权限收缩、汇报层级调整
 - [ ] **皇帝主动查岗**：主动要求御史台调查某岗位，或亲自查看履职流水
 - [ ] **弹劾升级路径**：御史台直奏后的完整廷议流程（三公合议、证据复核会审）
 
 ### 🔀 编排能力
-- [ ] **多执行岗并行**：一个上谕分派给多个岗位并行处理，跟踪各岗进度与汇总
+- [x] **多执行岗并行**：分派后各执行岗 agent 真并行（任务级并发 + 忙岗消息 requeue 不丢失）
+- [x] **催办闭环**：`inquire_progress` 查子任务进度并向未完岗发催办，迟到回报仍能触发汇总
 - [ ] **自由拟旨**：上谕从结构化表单演进为自然语言解析
-- [ ] **任务断点恢复**：agent 卡死超时、任务状态持久化、重启续跑
 
 ### 🎭 制度与模型
-- [ ] **制度换装完善**：新增三省六部制（中书出令、门下封驳、尚书执行）验证换装机制
+- [x] **制度换装完善**：三省六部制（中书出令、门下封驳、尚书执行）已验证换装机制；`IMPERIAL_INSTITUTION` 环境变量一键换装
+- [x] **白名单一致性**：bootstrap 校验制度 YAML 的 tool_allowance ⊆ 工具注册表，配置漂移 fail-fast
 - [ ] **模型可插拔**：丞相/御史大夫切换 deepseek-v4-pro；接入 kimi 等更多 provider
 - [ ] **agent 智能测试档案**：沉淀各岗位场景剧本验收用例、prompt 迭代历史
 
 ### 🏗 基础设施
+- [x] **任务断点恢复**：TaskTracker 写穿透 SQLite（schema v4），子任务进度与聚合 exactly-once 跨重启存活
+- [x] **降级与容错**：LLM 指数退避重试（429/超时/5xx，可配 `IMPERIAL_LLM_MAX_RETRIES`）；重试耗尽记审计降级，失败内容永不入奏折
+- [x] **CI**：GitHub Actions —— backend pytest（3.12/3.13）+ frontend lint/build
 - [ ] **外部消息中间件**：吞吐成为瓶颈时，总线从进程内 asyncio 演进到 Redis Streams
 - [ ] **认证与多租户**：支持多用户/多"朝廷"实例
-- [ ] **降级与容错**：LLM 失败重试/降级、超时、任务恢复
 
 ---
 
