@@ -27,3 +27,6 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# tests 以 `from tests.xxx import ...` 互相引用（namespace package）——
+# 保证裸 `pytest`（CI）与 `python -m pytest`（本地）行为一致
+pythonpath = ["."]
