@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -94,6 +94,23 @@ CREATE TABLE IF NOT EXISTS appointments (
   impeachment_id TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- v4: TaskTracker persistence — subtask progress survives restarts
+CREATE TABLE IF NOT EXISTS subtasks (
+  edict_id TEXT NOT NULL,
+  subtask_key TEXT NOT NULL,
+  target TEXT NOT NULL,
+  title TEXT NOT NULL,
+  completed INTEGER DEFAULT 0,
+  summary TEXT,
+  PRIMARY KEY (edict_id, subtask_key)
+);
+
+-- v4: which edicts already fired their aggregate callback (exactly-once)
+CREATE TABLE IF NOT EXISTS edict_aggregation (
+  edict_id TEXT PRIMARY KEY,
+  fired INTEGER DEFAULT 0
+);
 """
 
 
@@ -136,6 +153,25 @@ class Storage:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(posts)")}
             if "persona" not in cols:
                 conn.execute("ALTER TABLE posts ADD COLUMN persona TEXT")
+        if from_version < 4:
+            # v3 → v4: TaskTracker persistence tables
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS subtasks (
+                     edict_id TEXT NOT NULL,
+                     subtask_key TEXT NOT NULL,
+                     target TEXT NOT NULL,
+                     title TEXT NOT NULL,
+                     completed INTEGER DEFAULT 0,
+                     summary TEXT,
+                     PRIMARY KEY (edict_id, subtask_key)
+                   )"""
+            )
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS edict_aggregation (
+                     edict_id TEXT PRIMARY KEY,
+                     fired INTEGER DEFAULT 0
+                   )"""
+            )
 
     # ── generic ─────────────────────────────────────────────
     def execute(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Cursor:

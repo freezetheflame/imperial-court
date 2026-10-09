@@ -6,8 +6,11 @@ each report_result completes one. When the last subtask completes, an
 `on_all_complete` callback fires so the chancery can produce ONE aggregate
 memorial instead of one per result.
 
-Pure in-memory state (not persisted): a restart mid-flight loses tracking,
-which is acceptable for v1 — the memorials/events tables still hold truth.
+Persistence: when constructed with a Storage instance, subtask state and
+the fired-set are written through to SQLite (schema v4) and reloaded on
+startup. After a restart mid-flight, progress queries keep working and
+inquire_progress (催办) can re-urge pending posts — their late reports
+still complete the edict and fire the aggregate exactly once.
 """
 from __future__ import annotations
 
@@ -45,12 +48,57 @@ class EdictProgress:
 
 
 class TaskTracker:
-    """Tracks subtask completion per edict; fires on_all_complete once."""
+    """Tracks subtask completion per edict; fires on_all_complete once.
 
-    def __init__(self, on_all_complete: Callable[[str], Any] | None = None):
+    With `storage` given, state is write-through persisted and reloaded at
+    construction (restart recovery).
+    """
+
+    def __init__(
+        self,
+        on_all_complete: Callable[[str], Any] | None = None,
+        storage: Any | None = None,
+    ):
         self.on_all_complete = on_all_complete
+        self._storage = storage
         self._progress: dict[str, EdictProgress] = {}
         self._fired: set[str] = set()
+        if storage is not None:
+            self._load()
+
+    # ── persistence ────────────────────────────────────────
+    def _load(self) -> None:
+        """Reload subtask progress + fired-set from SQLite."""
+        for r in self._storage.query("SELECT * FROM subtasks"):
+            prog = self._progress.setdefault(r["edict_id"], EdictProgress(r["edict_id"]))
+            prog.subtasks[r["subtask_key"]] = SubtaskState(
+                target=r["target"], title=r["title"],
+                completed=bool(r["completed"]), summary=r["summary"],
+            )
+        for r in self._storage.query(
+            "SELECT edict_id FROM edict_aggregation WHERE fired = 1"
+        ):
+            self._fired.add(r["edict_id"])
+
+    def _persist_subtask(self, edict_id: str, key: str, sub: SubtaskState) -> None:
+        if self._storage is None:
+            return
+        self._storage.execute(
+            """INSERT INTO subtasks (edict_id, subtask_key, target, title, completed, summary)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (edict_id, subtask_key)
+               DO UPDATE SET completed = excluded.completed, summary = excluded.summary""",
+            (edict_id, key, sub.target, sub.title, int(sub.completed), sub.summary),
+        )
+
+    def _persist_fired(self, edict_id: str) -> None:
+        if self._storage is None:
+            return
+        self._storage.execute(
+            """INSERT INTO edict_aggregation (edict_id, fired) VALUES (?, 1)
+               ON CONFLICT (edict_id) DO UPDATE SET fired = 1""",
+            (edict_id,),
+        )
 
     # ── lifecycle ──────────────────────────────────────────
     def register_edict(self, edict_id: str) -> None:
@@ -63,6 +111,7 @@ class TaskTracker:
         prog = self._progress[edict_id]
         if subtask_key not in prog.subtasks:
             prog.subtasks[subtask_key] = SubtaskState(target=target, title=title)
+            self._persist_subtask(edict_id, subtask_key, prog.subtasks[subtask_key])
 
     def complete_subtask(self, edict_id: str, subtask_key: str, summary: str) -> bool:
         """Called by report_result. Returns True if this completed the edict."""
@@ -76,8 +125,10 @@ class TaskTracker:
             sub = prog.subtasks[subtask_key]
         sub.completed = True
         sub.summary = summary
+        self._persist_subtask(edict_id, subtask_key, sub)
         if prog.all_done and edict_id not in self._fired:
             self._fired.add(edict_id)
+            self._persist_fired(edict_id)
             return True
         return False
 
@@ -134,6 +185,9 @@ class TaskTracker:
     def reset(self) -> None:
         self._progress.clear()
         self._fired.clear()
+        if self._storage is not None:
+            self._storage.execute("DELETE FROM subtasks")
+            self._storage.execute("DELETE FROM edict_aggregation")
 
 
 async def fire_async(tracker: TaskTracker, edict_id: str) -> None:

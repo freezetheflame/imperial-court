@@ -135,7 +135,7 @@ def build_context(
     memorials = MemorialService(storage, bus, institution, engine)
     impeachments = ImpeachmentService(storage, bus, appointments)
     edicts = EdictService(storage, bus)
-    tracker = TaskTracker()
+    tracker = TaskTracker(storage=storage)  # persisted: survives restarts
     workflow = WorkflowEngine(
         institution=institution, bus=bus, memorials=memorials,
         edicts=edicts, tracker=tracker,
