@@ -89,7 +89,8 @@ def create_app(
             await ctx.scheduler.start()
             _pump_task = asyncio.create_task(ctx.scheduler.pump())
         # give every office a persona (background; template fallback if no LLM)
-        await asyncio.to_thread(ctx.ensure_personas)
+        # fire-and-forget: LLM 生成 8 个画像要数十秒，不能卡住监听端口
+        asyncio.create_task(asyncio.to_thread(ctx.ensure_personas))
 
     @app.on_event("shutdown")
     async def _stop_scheduler() -> None:
