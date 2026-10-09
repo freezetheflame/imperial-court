@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 
 const NAV = [
   { to: "/", label: "金銮殿", end: true },
+  { to: "/courtroom", label: "朝房" },
   { to: "/censorate", label: "御史台" },
   { to: "/posts", label: "百官名册" },
   { to: "/edicts", label: "拟旨下谕" },

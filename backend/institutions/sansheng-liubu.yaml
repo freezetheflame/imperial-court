@@ -18,6 +18,8 @@ institution:
       tool_allowance:
         - submit_draft        # 拟稿后送门下审核
         - query_events
+        - open_court_thread
+        - speak_in_court
 
     - id: menxia              # 门下省
       title: 侍中
@@ -27,6 +29,8 @@ institution:
         - approve             # 放行
         - veto                # 封驳打回
         - query_events
+        - open_court_thread
+        - speak_in_court
 
     - id: shangshu            # 尚书省
       title: 尚书令
@@ -36,43 +40,45 @@ institution:
         - dispatch_task       # 分派给六部
         - inquire_progress    # 催办：查进度并向未完岗发催办
         - query_events
+        - open_court_thread
+        - speak_in_court
 
     # 六部
     - id: libu
       title: 吏部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     - id: hubu
       title: 户部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     - id: lihu
       title: 礼部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     - id: bingbu
       title: 兵部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     - id: xingbu
       title: 刑部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     - id: gongbu
       title: 工部
       role: domain_executor
       reports_to: shangshu
-      tool_allowance: [run_task, report_result, query_events]
+      tool_allowance: [run_task, report_result, query_events, open_court_thread, speak_in_court]
 
     # 御史台
     - id: censor              # 御史大夫
@@ -85,6 +91,8 @@ institution:
         - draft_impeachment
         - issue_warning
         - recommend_removal
+        - open_court_thread
+        - speak_in_court
 
     - id: censor_assistant    # 御史（助手）
       title: 御史
@@ -164,6 +172,32 @@ institution:
     - from: system
       to: censor
       type: [violation_record]
+
+    # 朝房集议：参与者 → 朝房（广播；御史大夫在列，发言可为证据）
+    - from: [zhongshu, menxia, shangshu, libu, hubu, lihu, bingbu, xingbu, gongbu, censor]
+      to: court_room
+      type: [discuss]
+
+    # 皇帝御临朝房
+    - from: emperor
+      to: court_room
+      type: [discuss]
+
+  # ── 朝房集议（agent playground：自由讨论 + 轮次熔断）─────
+  court_room:
+    enabled: true
+    max_turns: 24
+    participants: [zhongshu, menxia, shangshu, libu, hubu, lihu, bingbu, xingbu, gongbu, censor]
+
+  # ── 监察决策模型（Jev 式概率裁决；阈值权重随制度换装）─────
+  censor_policy:
+    warn_threshold: 0.35
+    removal_threshold: 0.62
+    severity_weights:
+      tool_violation: 1.6
+      comm_violation: 1.3
+      dereliction: 1.0
+      court_misconduct: 0.8
 
   # ── 角色职责描述（prompt 数据化）───────────────────────
   role_descriptions:

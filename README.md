@@ -8,10 +8,10 @@
 </p>
 
 <p align="center">
-  <a href="#核心特性"><img src="https://img.shields.io/badge/特性-9个-blueviolet" alt="features"></a>
+  <a href="#核心特性"><img src="https://img.shields.io/badge/特性-11个-blueviolet" alt="features"></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/后端-FastAPI+-e53935" alt="backend"></a>
   <a href="#快速开始"><img src="https://img.shields.io/badge/前端-React%2019-61dafb" alt="frontend"></a>
-  <a href="#测试"><img src="https://img.shields.io/badge/测试-102%20passed-4caf50" alt="tests"></a>
+  <a href="#测试"><img src="https://img.shields.io/badge/测试-122%20passed-4caf50" alt="tests"></a>
   <a href="#真实运行效果"><img src="https://img.shields.io/badge/LLM-DeepSeek-6772e5" alt="llm"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/许可-MIT-8b1a1a" alt="license"></a>
 </p>
@@ -30,6 +30,8 @@
 | 📊 | **政事进度** | 任务进度百分比实时展示——下旨后看朝堂如何一步步办结 |
 | 🎭 | **人格画像** | 百官皆有姓名/字/性情/施政风格（LLM 生成），革职任命自动换人 |
 | 📜 | **史册审计** | 全量事件流 = 史册 = 御史台数据源，任何行为可溯源 |
+| 🏛 | **朝房集议** | 子 agent 的 playground：议题制自由讨论，广播 fan-out 驱动 agent 互相回应；皇帝可旁观可御临发言；每议题轮次熔断防 LLM 无限互聊 |
+| 🔮 | **Jev 式监察裁决** | 感知/裁决分离：LLM 只取证与置信度自评，不立案/警告/革职由确定性概率评分卡裁定（softmax 三分类 + 特征贡献审计摘要），阈值随制度 YAML 换装 |
 | 🏗 | **深模块设计** | 7 层分层，每层一个深模块（小接口、重行为），测试覆盖协议层/行为层/API/调度器 |
 
 ---
@@ -193,7 +195,7 @@ cd backend
 
 ```bash
 cd backend
-.venv/bin/python -m pytest tests/     # 102 passed + 3 skipped（需真 key 的 integration）
+.venv/bin/python -m pytest tests/     # 122 passed + 3 skipped（需真 key 的 integration）
 ```
 
 | 层 | 覆盖 |

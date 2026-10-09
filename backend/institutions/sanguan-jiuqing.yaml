@@ -20,6 +20,8 @@ institution:
         - dispatch_task       # 分派任务给执行岗
         - inquire_progress    # 催办：查进度并向未完岗发催办
         - query_events        # 查事件流（了解全局）
+        - open_court_thread   # 朝房开议题
+        - speak_in_court      # 朝房发言
       model: deepseek-v4-flash  # 丞相用 pro（发布后改 deepseek-v4-pro）
 
     - id: grand_commandant    # 太尉
@@ -30,6 +32,8 @@ institution:
         - compose_message     # 起草对外消息
         - run_task            # 执行具体事务
         - query_events
+        - open_court_thread
+        - speak_in_court
 
     - id: censor              # 御史大夫
       title: 御史大夫
@@ -39,8 +43,10 @@ institution:
         - query_events        # 查审计流水
         - review_logs         # 审查日志
         - draft_impeachment   # 起草弹劾奏章
-        - issue_warning       # 留任警告（自决）
-        - recommend_removal   # 建议革职（需朱批）
+        - issue_warning       # 留任警告（决策模型裁定后自决）
+        - recommend_removal   # 建议革职（决策模型裁定立案，需朱批）
+        - open_court_thread
+        - speak_in_court
       model: deepseek-v4-flash  # 主审也用 pro（发布后改 deepseek-v4-pro）
 
     - id: censor_assistant    # 御史（助手）
@@ -61,6 +67,8 @@ institution:
         - run_task            # 执行任务
         - query_events
         - report_result       # 呈报结果给丞相
+        - open_court_thread
+        - speak_in_court
 
     - id: justice             # 廷尉
       title: 廷尉
@@ -71,6 +79,8 @@ institution:
         - review_output       # 质检复核
         - query_events
         - report_result
+        - open_court_thread
+        - speak_in_court
 
     - id: relations           # 典客 + 宗正
       title: 典客
@@ -81,6 +91,8 @@ institution:
         - compose_message
         - query_events
         - report_result
+        - open_court_thread
+        - speak_in_court
 
     - id: internal            # 郎中令 + 卫尉 + 太仆 + 奉常
       title: 郎中令
@@ -90,6 +102,8 @@ institution:
         - run_task
         - query_events
         - report_result
+        - open_court_thread
+        - speak_in_court
 
   # ── 通信协议（白名单）──────────────────────────────────
   communication_rules:
@@ -147,6 +161,32 @@ institution:
     - from: system
       to: censor
       type: [violation_record]
+
+    # 朝房集议：参与者 → 朝房（广播，fan-out 至所有成员；御史大夫在列，发言可为证据）
+    - from: [chancery, grand_commandant, censor, finance, justice, relations, internal]
+      to: court_room
+      type: [discuss]
+
+    # 皇帝御临朝房
+    - from: emperor
+      to: court_room
+      type: [discuss]
+
+  # ── 朝房集议（agent playground：自由讨论 + 轮次熔断）─────
+  court_room:
+    enabled: true
+    max_turns: 24        # 每议题发言熔断上限（防 LLM 无限互聊烧 token，非治理）
+    participants: [chancery, grand_commandant, censor, finance, justice, relations, internal]
+
+  # ── 监察决策模型（Jev 式概率裁决；阈值权重随制度换装）─────
+  censor_policy:
+    warn_threshold: 0.35      # P(立案) ≥ 此值 → 至少警告
+    removal_threshold: 0.62   # P(革职) ≥ 此值 → 建议革职
+    severity_weights:
+      tool_violation: 1.6     # 越权用器
+      comm_violation: 1.3     # 违制通信
+      dereliction: 1.0        # 失职
+      court_misconduct: 0.8   # 朝房失仪
 
   # ── 角色职责描述（prompt 数据化，随制度换装）─────────────
   role_descriptions:

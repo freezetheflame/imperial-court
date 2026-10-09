@@ -13,6 +13,7 @@ const EVENT_QUERY_MAP: Record<StreamEvent, string[]> = {
   memorial: ["memorials"],
   impeachment: ["impeachments", "censorate"],
   post_status: ["posts", "censorate"],
+  court: ["court"],
   ping: [],
 };
 

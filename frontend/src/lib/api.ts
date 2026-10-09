@@ -83,6 +83,34 @@ export interface CensorateOverview {
   removals: number;
 }
 
+// ── court room (朝房集议) ────────────────────────────────
+export interface CourtMessage {
+  id: string;
+  thread_id: string;
+  frm: string;
+  content: string;
+  created_at?: string;
+}
+
+export interface CourtThread {
+  id: string;
+  topic: string;
+  opened_by: string;
+  status: "open" | "closed";
+  turns: number;
+  created_at?: string;
+  closed_at?: string | null;
+  last_message?: Pick<CourtMessage, "frm" | "content" | "created_at"> | null;
+  messages?: CourtMessage[];
+}
+
+export interface CourtRoomState {
+  enabled: boolean;
+  max_turns: number;
+  participants: string[];
+  threads: CourtThread[];
+}
+
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -156,6 +184,20 @@ export const api = {
   censorateOverview: () => request<CensorateOverview>("/api/censorate/overview"),
   censorateViolations: (limit = 20) =>
     request<EventRecord[]>(`/api/censorate/violations?limit=${limit}`),
+
+  // court room (朝房集议 / agent playground)
+  courtRoom: () => request<CourtRoomState>("/api/court"),
+  getCourtThread: (id: string) => request<CourtThread>(`/api/court/threads/${id}`),
+  openCourtThread: (topic: string) =>
+    request<CourtThread>("/api/court/threads", {
+      method: "POST",
+      body: JSON.stringify({ topic }),
+    }),
+  speakInCourt: (threadId: string, content: string) =>
+    request<{ delivered: boolean; thread_closed: boolean }>(`/api/court/threads/${threadId}/speak`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
 };
 
 // SSE stream types (event names from backend EventBroadcaster)
@@ -164,6 +206,7 @@ export type StreamEvent =
   | "memorial"
   | "impeachment"
   | "post_status"
+  | "court"
   | "ping";
 
 export interface StreamPayload<T = Record<string, unknown>> {

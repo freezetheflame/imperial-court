@@ -11,12 +11,14 @@ def db(tmp_path):
 
 
 def test_schema_v4_tables_exist(db):
+    from imperial.storage import SCHEMA_VERSION
+
     storage = Storage(db)
     tables = {r["name"] for r in storage.query(
         "SELECT name FROM sqlite_master WHERE type = 'table'"
     )}
     assert {"subtasks", "edict_aggregation"} <= tables
-    assert storage.query_one("SELECT version FROM schema_version")["version"] == 4
+    assert storage.query_one("SELECT version FROM schema_version")["version"] == SCHEMA_VERSION
 
 
 def test_progress_survives_restart(db):

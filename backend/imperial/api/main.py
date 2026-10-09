@@ -66,6 +66,8 @@ def create_app(
         ctx.memorials.on_submit = lambda row: asyncio.get_event_loop().create_task(
             broadcaster.broadcast("memorial", row)
         )
+    # 朝房集议的 SSE 推送（agent 发言不经过 routes，由服务直接广播）
+    ctx.court.set_broadcaster(broadcaster.broadcast)
 
     app = FastAPI(title="Imperial Court", version="0.1.0")
     app.add_middleware(

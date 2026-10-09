@@ -105,6 +105,14 @@ class Workflow:
 
 
 @dataclass(frozen=True)
+class CourtRoomConfig:
+    """朝房集议配置：哪些岗位可入朝房、每议题轮次熔断、总开关。"""
+    enabled: bool = False
+    max_turns: int = 24
+    participants: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Institution:
     id: str
     name: str
@@ -116,6 +124,8 @@ class Institution:
     ui_config: dict[str, Any] = field(default_factory=dict)
     workflows: dict[str, Workflow] = field(default_factory=dict)
     role_descriptions: dict[str, str] = field(default_factory=dict)
+    court_room: CourtRoomConfig = field(default_factory=CourtRoomConfig)
+    censor_policy: dict[str, Any] = field(default_factory=dict)
 
     # ── lookups ────────────────────────────────────────────
     def post(self, post_id: str) -> Post:
@@ -150,7 +160,7 @@ class Institution:
         return self.workflows[name]
 
 
-_SPECIAL_ACTORS = {"emperor", "system", "any", "any_executor"}
+_SPECIAL_ACTORS = {"emperor", "system", "any", "any_executor", "court_room"}
 _REQUIRED_POST_FIELDS = {"id", "title", "role", "reports_to", "tool_allowance"}
 # roles are descriptive (UI group + prompt key); the engine keys off Stage.capability
 _VALID_ROLES = {
@@ -331,6 +341,43 @@ def _parse_role_descriptions(inst: dict) -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items()}
 
 
+def _parse_court_room(inst: dict, all_posts: set[str]) -> CourtRoomConfig:
+    """Parse the optional court_room section (朝房集议 / agent playground).
+
+    Absent section → disabled config (default). Present but malformed →
+    fail fast, consistent with the rest of the loader.
+    """
+    raw = inst.get("court_room")
+    if raw is None:
+        return CourtRoomConfig()
+    if not isinstance(raw, dict):
+        raise InstitutionError("institution.court_room must be a mapping")
+    enabled = raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise InstitutionError("court_room.enabled must be a boolean")
+    max_turns = raw.get("max_turns", 24)
+    if not isinstance(max_turns, int) or max_turns < 1:
+        raise InstitutionError("court_room.max_turns must be a positive int")
+    participants = raw.get("participants", [])
+    if not isinstance(participants, list) or any(p not in all_posts for p in participants):
+        raise InstitutionError("court_room.participants must be a list of known posts")
+    return CourtRoomConfig(enabled=enabled, max_turns=max_turns, participants=tuple(participants))
+
+
+def _parse_censor_policy(inst: dict) -> dict[str, Any]:
+    """Optional censor_policy section (Jev 式监察决策模型的阈值与权重).
+
+    Kept as a raw validated mapping; CensorDecisionModel applies defaults
+    for absent keys so institutions can override selectively.
+    """
+    raw = inst.get("censor_policy")
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise InstitutionError("institution.censor_policy must be a mapping")
+    return dict(raw)
+
+
 def load_institution(path: Path | str) -> Institution:
     """Load and validate an institution definition from YAML."""
     path = Path(path)
@@ -421,6 +468,8 @@ def load_institution(path: Path | str) -> Institution:
 
     workflows = _parse_workflows(inst, set(seen))
     role_descriptions = _parse_role_descriptions(inst)
+    court_room = _parse_court_room(inst, set(seen))
+    censor_policy = _parse_censor_policy(inst)
 
     ui = inst.get("emperor_ui", {}) if isinstance(inst.get("emperor_ui"), dict) else {}
 
@@ -435,4 +484,6 @@ def load_institution(path: Path | str) -> Institution:
         ui_config=ui,
         workflows=workflows,
         role_descriptions=role_descriptions,
+        court_room=court_room,
+        censor_policy=censor_policy,
     )

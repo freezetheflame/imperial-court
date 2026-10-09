@@ -98,6 +98,51 @@ class Bus:
         await queue.put(msg)
         return True, decision
 
+    async def post_to_room(
+        self,
+        frm: str,
+        room: str,
+        msg_type: str,
+        payload: dict[str, Any],
+        recipients: list[str] | tuple[str, ...],
+    ) -> tuple[bool, RuleDecision | None]:
+        """Broadcast: adjudicate once against `frm → room`, then fan out raw
+        copies to every recipient (except the sender).
+
+        Used by the court room (朝房): the whitelist governs *who may speak
+        in the room*; delivery to room members is internal fan-out. Each
+        delivery is audited individually so the censorate sees exactly who
+        received what.
+        """
+        action = SendMessageAction(frm, room, msg_type)
+        decision = self.engine.judge(action)
+        msg = Message(
+            id=f"msg_{uuid.uuid4().hex[:12]}",
+            frm=frm,
+            to=room,
+            type=msg_type,
+            payload=payload,
+        )
+        if not decision.allowed:
+            self._audit("message_blocked", frm, decision=decision, message=msg.as_dict())
+            await self._forward_violation(frm, room, msg_type, decision)
+            return False, decision
+
+        self._audit("message_sent", frm, decision=decision, message=msg.as_dict())
+        for recipient in recipients:
+            if recipient == frm:
+                continue
+            await self._deliver_raw(
+                Message(
+                    id=f"msg_{uuid.uuid4().hex[:12]}",
+                    frm=frm,
+                    to=recipient,
+                    type=msg_type,
+                    payload=payload,
+                )
+            )
+        return True, decision
+
     async def _forward_violation(self, frm: str, to: str, msg_type: str, decision: RuleDecision) -> None:
         """Notify the inspection workflow's entry post of an attempted violation."""
         insp = self.institution.workflows.get("inspection")

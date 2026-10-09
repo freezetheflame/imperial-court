@@ -71,6 +71,7 @@ export function ThroneHall() {
     <button className="vista-token" onClick={() => setVista(true)} aria-label="临轩远眺，观殿外江山"><small>远眺</small>殿外江山</button>
 
     <div className="throne-actions">
+      <NavLink to="/courtroom" className="command-token"><small>集议</small>朝房</NavLink>
       <NavLink to="/censorate" className="command-token"><small>移驾</small>御史台</NavLink>
       <NavLink to="/posts" className="command-token"><small>翻阅</small>百官名册</NavLink>
       <NavLink to="/edicts" className="command-token"><small>御笔</small>拟旨下谕</NavLink>

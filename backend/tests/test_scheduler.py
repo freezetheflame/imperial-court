@@ -99,8 +99,17 @@ async def test_edict_flow_creates_memorial(world):
     assert full is not None and "谨奏" in full["content"]
 
 
-async def test_violation_record_opens_impeachment(world):
-    """A blocked message → violation_record → censor agent → impeachment memorial."""
+def _seed_post(storage, post_id):
+    storage.execute(
+        """INSERT INTO posts (id, institution_id, title, role, reports_to, status)
+           VALUES (?, 'sanguan-jiuqing', ?, 'executor', 'chancery', 'active')""",
+        (post_id, post_id),
+    )
+
+
+async def test_violation_record_first_offence_warns_not_impeaches(world):
+    """初犯轻案：决策模型未达革职阈值 → 降格警告，弹劾不上达天听。"""
+    _seed_post(world["storage"], "finance")
     await world["scheduler"].start()
 
     world["fake_llms"]["censor"] = FakeLLM(script=[
@@ -108,9 +117,9 @@ async def test_violation_record_opens_impeachment(world):
             {"name": "query_events", "arguments": {"post_id": "finance"}},
         ]},
         {"tool_calls": [
-            {"name": "recommend_removal", "arguments": {"post_id": "finance", "reason": "多次越权"}},
+            {"name": "recommend_removal", "arguments": {"post_id": "finance", "reason": "一次越权"}},
         ]},
-        {"content": "证据确凿，建议革职。"},
+        {"content": "已查证。"},
     ])
 
     # finance tries to message emperor directly → blocked → violation → censor
@@ -118,10 +127,45 @@ async def test_violation_record_opens_impeachment(world):
     await world["scheduler"].pump_once()
     await world["scheduler"].pump_once()
 
-    # impeachment memorial should have been submitted by censor (privileged)
+    # 模型裁定降格：无弹劾奏折，finance 被记警告
+    assert world["memorials"].list() == []
+    warns = world["storage"].query(
+        "SELECT * FROM appointments WHERE post_id = 'finance' AND action = 'warn'"
+    )
+    assert len(warns) == 1
+    # 决策全程留痕（audit summary 可查）
+    decisions = world["storage"].get_events(kind="censor_decision", post_id="finance")
+    assert len(decisions) == 1
+    assert decisions[0]["detail"]["recommendation"] == "warning"
+
+
+async def test_violation_record_repeat_offender_impeached(world):
+    """累犯重案：前科+警告把 P(革职) 推过阈值 → 弹劾奏折直奏皇帝。"""
+    await world["scheduler"].start()
+
+    # 给 finance 攒足前科：3 次违制 + 1 次警告（重犯加成）
+    _seed_post(world["storage"], "finance")
+    for _ in range(3):
+        world["storage"].insert_event("message_blocked", "finance", {"tool": "report_result"})
+    world["appointments"].warn("finance", reason="此前留任警告")
+
+    world["fake_llms"]["censor"] = FakeLLM(script=[
+        {"tool_calls": [
+            {"name": "recommend_removal", "arguments": {"post_id": "finance", "reason": "屡犯不改", "confidence": 0.9}},
+        ]},
+        {"content": "证据确凿，建议革职。"},
+    ])
+
+    await world["bus"].post_message("finance", "emperor", "report", {"data": "x"})
+    await world["scheduler"].pump_once()
+    await world["scheduler"].pump_once()
+
     memorials = world["memorials"].list()
     assert len(memorials) == 1
     assert memorials[0]["from_post"] == "censor"
+    decision = world["storage"].get_events(kind="censor_decision", post_id="finance")[0]["detail"]
+    assert decision["recommendation"] == "removal"
+    assert decision["probabilities"]["removal"] >= 0.62
 
 
 async def test_executor_agent_runs_on_assignment(world):

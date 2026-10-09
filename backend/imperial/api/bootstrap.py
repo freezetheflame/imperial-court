@@ -21,6 +21,7 @@ from imperial.agent.tools import build_tools, validate_tool_allowances
 from imperial.agent.tracker import TaskTracker
 from imperial.bus import Bus
 from imperial.court.appointments import AppointmentService
+from imperial.court.discussion import CourtRoomService
 from imperial.court.edicts import EdictService
 from imperial.court.impeachments import ImpeachmentService
 from imperial.court.memorials import MemorialService
@@ -82,6 +83,7 @@ class AppContext:
     memorials: MemorialService
     impeachments: ImpeachmentService
     edicts: EdictService
+    court: CourtRoomService
     tools: Any
     tracker: TaskTracker
     personas: PersonaService
@@ -145,9 +147,10 @@ def build_context(
         institution=institution, bus=bus, memorials=memorials,
         edicts=edicts, tracker=tracker,
     )
+    court = CourtRoomService(storage=storage, bus=bus, institution=institution)
     tools = build_tools(
         bus=bus, storage=storage, memorials=memorials, appointments=appointments,
-        tracker=tracker, engine=workflow,
+        tracker=tracker, engine=workflow, court=court,
     )
     # fail fast if the institution YAML whitelists tools that don't exist
     allowance_violations = validate_tool_allowances(institution, tools)
@@ -186,7 +189,7 @@ def build_context(
     return AppContext(
         storage=storage, institution=institution, engine=engine, bus=bus,
         appointments=appointments, memorials=memorials, impeachments=impeachments,
-        edicts=edicts, tools=tools, tracker=tracker, personas=personas,
+        edicts=edicts, court=court, tools=tools, tracker=tracker, personas=personas,
         workflow=workflow, scheduler=scheduler,
     )
 

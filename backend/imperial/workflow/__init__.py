@@ -169,6 +169,11 @@ class WorkflowEngine:
             return
         for tc in result.tool_calls:
             if tc.name == on_tool and tc.allowed:
+                # Jev gate: when the tool carries a decision-model verdict,
+                # the impeachment is filed only if the model approved filing
+                # (dismissed/downgraded cases must not reach the emperor).
+                if isinstance(tc.result, dict) and "recommended" in tc.result and not tc.result["recommended"]:
+                    return
                 await self.memorials.submit(
                     frm=post_id,
                     content=f"弹劾{tc.arguments.get('post_id')}：{tc.arguments.get('reason', '')}",

@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -111,6 +111,25 @@ CREATE TABLE IF NOT EXISTS edict_aggregation (
   edict_id TEXT PRIMARY KEY,
   fired INTEGER DEFAULT 0
 );
+
+-- v5: 朝房集议 — discussion threads among posts (the agent playground)
+CREATE TABLE IF NOT EXISTS court_threads (
+  id TEXT PRIMARY KEY,
+  topic TEXT NOT NULL,
+  opened_by TEXT NOT NULL,
+  status TEXT DEFAULT 'open',
+  turns INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  closed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS court_messages (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  frm TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -170,6 +189,28 @@ class Storage:
                 """CREATE TABLE IF NOT EXISTS edict_aggregation (
                      edict_id TEXT PRIMARY KEY,
                      fired INTEGER DEFAULT 0
+                   )"""
+            )
+        if from_version < 5:
+            # v4 → v5: 朝房集议（court room discussion）tables
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS court_threads (
+                     id TEXT PRIMARY KEY,
+                     topic TEXT NOT NULL,
+                     opened_by TEXT NOT NULL,
+                     status TEXT DEFAULT 'open',
+                     turns INTEGER DEFAULT 0,
+                     created_at TEXT DEFAULT (datetime('now')),
+                     closed_at TEXT
+                   )"""
+            )
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS court_messages (
+                     id TEXT PRIMARY KEY,
+                     thread_id TEXT NOT NULL,
+                     frm TEXT NOT NULL,
+                     content TEXT NOT NULL,
+                     created_at TEXT DEFAULT (datetime('now'))
                    )"""
             )
 

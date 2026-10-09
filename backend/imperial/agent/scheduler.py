@@ -132,6 +132,23 @@ class AgentScheduler:
 
     def _render_task(self, msg: Message) -> str:
         payload = msg.payload or {}
+        if msg.type == "discuss":
+            # 朝房集议：给 agent 足够的语境判断进言还是默然——
+            # 避免每个成员对每条发言都无脑接话（轮次熔断之外的第二道保险）
+            speaker = payload.get("speaker", msg.frm)
+            if speaker == "emperor":
+                who = "陛下"
+            elif self.institution.has_post(speaker):
+                who = self.institution.post(speaker).title
+            else:
+                who = speaker
+            return (
+                f"【朝房集议】议题「{payload.get('topic', '?')}」"
+                f"（第 {payload.get('turn', '?')} 言，余 {payload.get('turns_left', '?')} 言熔断）\n"
+                f"{who}言：{payload.get('content', '')}\n"
+                "你若于本议题有实见，可借 speak_in_court 进言（thread_id 如上）；"
+                "陛下御言尤须回应。无见则默然——直接作答退朝，不调用任何工具。"
+            )
         lines = [f"收到消息（类型: {msg.type}，来自: {msg.frm}）："]
         for k, v in payload.items():
             lines.append(f"- {k}: {v}")

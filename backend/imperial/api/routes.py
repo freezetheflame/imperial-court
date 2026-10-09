@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from imperial.api.bootstrap import AppContext
 from imperial.api.events import EventBroadcaster
+from imperial.court.discussion import CourtRoomError
 from imperial.court.edicts import EdictForm
 from imperial.court.impeachments import ImpeachmentError
 from imperial.court.memorials import MemorialError
@@ -48,6 +49,14 @@ class TransferIn(BaseModel):
     to_post: str
     reason: str = "调任"
     action: str = Field(default="transfer", pattern="^(transfer|demote)$")
+
+
+class CourtThreadIn(BaseModel):
+    topic: str = Field(min_length=1, max_length=200)
+
+
+class CourtSpeakIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
 
 
 # ── dependency ─────────────────────────────────────────────
@@ -255,3 +264,41 @@ def censorate_overview() -> dict[str, Any]:
 @router.get("/censorate/violations")
 def censorate_violations(limit: int = 20) -> list[dict[str, Any]]:
     return _ctx().storage.get_events(kind="violation", limit=limit)
+
+
+# ── court room (朝房集议 / agent playground) ──────────────
+@router.get("/court")
+def court_room_state() -> dict[str, Any]:
+    court = _ctx().court
+    return {
+        "enabled": court.enabled,
+        "max_turns": court.max_turns,
+        "participants": list(court.participants),
+        "threads": court.list_threads(),
+    }
+
+
+@router.get("/court/threads/{thread_id}")
+def court_thread(thread_id: str) -> dict[str, Any]:
+    thread = _ctx().court.get_thread(thread_id)
+    if thread is None:
+        raise HTTPException(404, "thread not found")
+    return thread
+
+
+@router.post("/court/threads", status_code=201)
+async def court_open_thread(body: CourtThreadIn) -> dict[str, Any]:
+    """皇帝开议题。"""
+    try:
+        return await _ctx().court.open_thread(topic=body.topic, opened_by="emperor")
+    except CourtRoomError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@router.post("/court/threads/{thread_id}/speak")
+async def court_speak(thread_id: str, body: CourtSpeakIn) -> dict[str, Any]:
+    """皇帝御临朝房发言——fan-out 给所有朝房成员，百官可回应。"""
+    try:
+        return await _ctx().court.speak(thread_id=thread_id, frm="emperor", content=body.content)
+    except CourtRoomError as e:
+        raise HTTPException(400, str(e)) from e
