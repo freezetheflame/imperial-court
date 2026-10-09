@@ -124,10 +124,25 @@ class Bus:
         await queue.put(msg)
 
     # ── receiving ──────────────────────────────────────────
+    async def requeue(self, post_id: str, msg: Message) -> None:
+        """Put a message back at the tail of a post's inbox.
+
+        Used by the scheduler when a post's agent is busy (single-flight):
+        the message is NOT dropped — it will be delivered on a later pump.
+        """
+        queue = await self._queue_for(post_id)
+        await queue.put(msg)
+
     async def pump_once(self) -> None:
-        """Deliver all currently-queued messages to handlers (test-friendly)."""
+        """Deliver queued messages to handlers (test-friendly).
+
+        Snapshot drain: each inbox is drained only up to its size when
+        reached — messages requeued into the SAME inbox mid-drain (busy
+        agent, single-flight) wait for the next pump instead of spinning
+        the drain loop forever.
+        """
         for post_id, queue in list(self._inboxes.items()):
-            while True:
+            for _ in range(queue.qsize()):
                 try:
                     msg = queue.get_nowait()
                 except asyncio.QueueEmpty:
@@ -135,6 +150,10 @@ class Bus:
                 for handler in self._handlers.get(post_id, []):
                     await handler(msg)
                 queue.task_done()
+
+    def has_queued_messages(self) -> bool:
+        """Any inbox still holding undelivered messages?"""
+        return any(not q.empty() for q in self._inboxes.values())
 
     async def pump(self) -> None:
         """Deliver queued messages to handlers. Run as a background task."""

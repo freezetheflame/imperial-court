@@ -61,7 +61,10 @@ async def test_edict_flow_creates_memorial(world):
     all subtasks done → aggregate → ONE memorial."""
     await world["scheduler"].start()
 
-    # chancery agent: decompose + dispatch two subtasks to two executors
+    # chancery + executor scripts set BEFORE the pump: pump_once pumps until quiescent,
+    # so the whole cascade (dispatch → execute → aggregate → memorial)
+    # completes in one call. chancery runs TWICE: edict (decompose/dispatch)
+    # then aggregate (summary) — the script covers both invocations.
     world["fake_llms"]["chancery"] = FakeLLM(script=[
         {"tool_calls": [
             {"name": "decompose_task", "arguments": {"edict_id": "e1", "subtasks": [
@@ -72,9 +75,8 @@ async def test_edict_flow_creates_memorial(world):
             {"name": "dispatch_task", "arguments": {"edict_id": "e1", "target": "justice", "title": "t2", "description": "d2"}},
         ]},
         {"content": "已分派完毕。"},
+        {"content": "两处回报已汇总，臣谨奏陛下。"},
     ])
-    # executor scripts set BEFORE the pump: pump_once drains all queues in
-    # one pass, so finance/justice run in the same pump as chancery's dispatch
     world["fake_llms"]["finance"] = FakeLLM(script=[
         {"tool_calls": [{"name": "run_task", "arguments": {"task": "汇总数据"}}]},
         {"tool_calls": [{"name": "report_result", "arguments": {"edict_id": "e1", "summary": "数据已汇总"}}]},
@@ -88,15 +90,6 @@ async def test_edict_flow_creates_memorial(world):
 
     await world["edicts"].issue(world_edict_form())
     await world["scheduler"].pump_once()
-
-    # no memorial yet — chancery only decomposed/dispatched
-    assert world["memorials"].list() == []
-
-    # chancery summarizes the aggregate → exactly ONE memorial
-    world["fake_llms"]["chancery"] = FakeLLM(script=[
-        {"content": "两处回报已汇总，臣谨奏陛下。"},
-    ])
-    await world["scheduler"].pump_once()  # aggregate → chancery agent → memorial
 
     # aggregate message fired → chancery summarized → exactly ONE memorial
     memorials = world["memorials"].list()
@@ -158,47 +151,43 @@ async def test_executor_agent_runs_on_assignment(world):
     assert reports, "no report delivered to chancery"
 
 
-async def test_single_flight_skips_while_busy(world):
-    """While a post's agent is running, extra messages are not re-entered."""
+async def test_busy_post_requeues_then_runs(world):
+    """Single-flight: while a post's agent is running, extra messages are
+    requeued (not dropped, not re-entered) and processed on a later pump."""
     await world["scheduler"].start()
 
     entered = asyncio.Event()
     release = asyncio.Event()
 
-    class SlowFake(FakeLLM):
-        def complete(self, messages, tools=None, *, model=None):  # type: ignore[override]
-            return super().complete(messages, tools, model=model)
-
     # patch _run_agent to gate on an event so we can hold the first run open
+    # (_running is now managed by _dispatch, before _run_agent starts)
     original = world["scheduler"]._run_agent  # noqa: SLF001
     calls = {"n": 0}
 
     async def gated_run(post_id, msg):
-        if post_id in world["scheduler"]._running:  # noqa: SLF001
-            return  # single-flight: busy
-        world["scheduler"]._running.add(post_id)  # noqa: SLF001
         calls["n"] += 1
         if calls["n"] == 1:
             entered.set()
             await release.wait()
-        try:
-            return await original(post_id, msg)
-        finally:
-            world["scheduler"]._running.discard(post_id)  # noqa: SLF001
+        return await original(post_id, msg)
 
     world["scheduler"]._run_agent = gated_run  # type: ignore[method-assign]
-    world["fake_llms"]["chancery"] = SlowFake(script=[{"content": "处理中。"}])
+    world["fake_llms"]["chancery"] = FakeLLM(script=[{"content": "处理中。"}])
 
     msg1 = Message(id="m1", frm="emperor", to="chancery", type="edict", payload={"edict_id": "a"})
     msg2 = Message(id="m2", frm="emperor", to="chancery", type="edict", payload={"edict_id": "b"})
 
     task = asyncio.create_task(world["scheduler"]._dispatch("chancery", msg1))  # noqa: SLF001
     await entered.wait()  # first run is now inside _run_agent
-    # second message while busy: _running contains chancery → skipped
+    # second message while busy: requeued into chancery's inbox, NOT run yet
     await world["scheduler"]._dispatch("chancery", msg2)  # noqa: SLF001
     release.set()
     await task
     assert calls["n"] == 1  # only the first run executed
+
+    # the requeued message is not lost: a later pump picks it up
+    await world["scheduler"].pump_once()
+    assert calls["n"] == 2
 
 
 def world_edict_form():

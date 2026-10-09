@@ -1,8 +1,10 @@
 """Appointment service — post lifecycle: remove (革职), appoint (任命),
-warn (留任警告).
+warn (留任警告), transfer (调任), demote (降职).
 
 Removals leave the post vacant; the emperor must appoint a new agent.
 Warnings are recorded and leave the post untouched.
+Transfers move the current agent (and their persona) to another post,
+leaving the source post vacant; demotion is a transfer to a lower post.
 """
 from __future__ import annotations
 
@@ -54,6 +56,40 @@ class AppointmentService:
         self._get_post(post_id)  # raises if unknown
         self._record("warn", post_id, reason=reason, impeachment_id=impeachment_id)
         return self._get_post(post_id)  # type: ignore[return-value]
+
+    def transfer(
+        self,
+        frm_post: str,
+        to_post: str,
+        *,
+        reason: str,
+        action: str = "transfer",
+    ) -> dict[str, Any]:
+        """调任 — move the current agent (persona included) to another post.
+
+        The source post becomes vacant (its agent now holds the new office);
+        the target post's previous holder is replaced.
+        """
+        src = self._get_post(frm_post)
+        self._get_post(to_post)  # raises if unknown
+        agent = src.get("current_agent")
+        if not agent:
+            raise AppointmentError(f"岗位 {frm_post} 空缺，无人可调")
+        self.storage.execute(
+            "UPDATE posts SET status = 'vacant', current_agent = NULL, persona = NULL WHERE id = ?",
+            (frm_post,),
+        )
+        self.storage.execute(
+            "UPDATE posts SET status = 'active', current_agent = ?, persona = ? WHERE id = ?",
+            (agent, src.get("persona"), to_post),
+        )
+        self._record(action, frm_post, reason=reason, agent=agent)
+        self._record(action, to_post, reason=reason, agent=agent)
+        return self._get_post(to_post)  # type: ignore[return-value]
+
+    def demote(self, frm_post: str, to_post: str, *, reason: str) -> dict[str, Any]:
+        """降职 — transfer to a lower office (recorded as 'demote')."""
+        return self.transfer(frm_post, to_post, reason=reason, action="demote")
 
     # ── queries ────────────────────────────────────────────
     def list_posts(self, institution_id: str | None = None) -> list[dict[str, Any]]:

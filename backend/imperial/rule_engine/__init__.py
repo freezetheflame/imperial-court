@@ -73,15 +73,43 @@ PolicyFn = Callable[[dict, Institution], RuleDecision]
 
 
 class RuleEngine:
-    """Adjudicates actions against an institution's rules."""
+    """Adjudicates actions against an institution's rules.
 
-    def __init__(self, institution: Institution):
+    `post_status` (optional): callable(post_id) -> status str | None, used
+    for dynamic permission — an action from a non-active post (vacant after
+    革职) is denied regardless of whitelists. emperor/system are exempt.
+    Without the callback, behaviour is purely static (whitelist lookups).
+    """
+
+    EXEMPT_ACTORS = ("emperor", "system")
+
+    def __init__(
+        self,
+        institution: Institution,
+        post_status: Callable[[str], str | None] | None = None,
+    ):
         self.institution = institution
+        self._post_status = post_status
         self._policies: dict[str, PolicyFn] = {}
 
     # ── policy registration (dynamic rules) ────────────────
     def register_policy(self, key: str, fn: PolicyFn) -> None:
         self._policies[key] = fn
+
+    # ── dynamic permission (post lifecycle) ────────────────
+    def post_active(self, post_id: str) -> bool:
+        """Whether the post currently holds office (not vacant/unknown-exempt)."""
+        return self._status_denial(post_id) is None
+
+    def _status_denial(self, actor: str) -> RuleDecision | None:
+        if actor in self.EXEMPT_ACTORS or self._post_status is None:
+            return None
+        status = self._post_status(actor)
+        if status is not None and status != "active":
+            return RuleDecision(
+                False, f"岗位 {actor} 已空缺（革职/未任命），职权中止", kind="policy",
+            )
+        return None
 
     # ── single adjudication entry point ────────────────────
     def judge(self, action: Action, context: dict | None = None) -> RuleDecision:
@@ -96,6 +124,9 @@ class RuleEngine:
 
     # ── static adjudicators ────────────────────────────────
     def _judge_message(self, action: SendMessageAction, ctx: dict) -> RuleDecision:
+        denial = self._status_denial(action.frm)
+        if denial is not None:
+            return denial
         key = f"message:{action.frm}->{action.to}:{action.msg_type}"
         policy = self._policies.get(key)
         if policy is not None:
@@ -106,6 +137,9 @@ class RuleEngine:
         return RuleDecision(False, "not in communication whitelist")
 
     def _judge_tool(self, action: CallToolAction, ctx: dict) -> RuleDecision:
+        denial = self._status_denial(action.post)
+        if denial is not None:
+            return denial
         key = f"tool:{action.post}:{action.tool}"
         policy = self._policies.get(key)
         if policy is not None:

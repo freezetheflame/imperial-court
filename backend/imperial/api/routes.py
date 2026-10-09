@@ -44,6 +44,12 @@ class AppointIn(BaseModel):
     agent: str = Field(default="", description="agent id；空则系统自动生成")
 
 
+class TransferIn(BaseModel):
+    to_post: str
+    reason: str = "调任"
+    action: str = Field(default="transfer", pattern="^(transfer|demote)$")
+
+
 # ── dependency ─────────────────────────────────────────────
 _ctx_ref: AppContext | None = None
 _bc_ref: EventBroadcaster | None = None
@@ -199,6 +205,19 @@ async def appoint(post_id: str, body: AppointIn) -> dict[str, Any]:
     agent = body.agent or f"agent_{post_id}_{len(_ctx().appointments.list_appointments())}"
     try:
         row = _ctx().appointments.appoint(post_id, agent=agent)
+    except Exception as e:  # AppointmentError
+        raise HTTPException(400, str(e)) from e
+    await _bc().broadcast("post_status", row)
+    return _post_with_persona(row)
+
+
+@router.post("/posts/{post_id}/transfer")
+async def transfer(post_id: str, body: TransferIn) -> dict[str, Any]:
+    """调任/降职：把某岗现任 agent 移到另一岗，原岗出缺。"""
+    try:
+        row = _ctx().appointments.transfer(
+            post_id, body.to_post, reason=body.reason, action=body.action,
+        )
     except Exception as e:  # AppointmentError
         raise HTTPException(400, str(e)) from e
     await _bc().broadcast("post_status", row)

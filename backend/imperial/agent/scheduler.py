@@ -12,7 +12,10 @@ finished run back to the engine to route the next step.
 
 Design notes:
 - Workers are single-flight per post: while a post's agent is running, new
-  messages queue in its inbox and are processed on the next pump.
+  messages for it are requeued (never dropped) and retried on a later pump.
+- Different posts run in PARALLEL: dispatch starts the agent as a task and
+  the pump moves on to other inboxes; pump_once() awaits the tasks it
+  started so tests keep their synchronous feel.
 - The scheduler is async and driven by an explicit pump(); tests drive it
   with pump_once(), production with a background task.
 """
@@ -51,6 +54,7 @@ class AgentScheduler:
         self.loop_factory = loop_factory
         self.edicts = edicts
         self._running: set[str] = set()
+        self._pending: set[asyncio.Task] = set()
         self._system_prompts = {
             p.id: build_system_prompt(p.id, institution) for p in institution.posts
         }
@@ -77,16 +81,29 @@ class AgentScheduler:
     # ── message routing ────────────────────────────────────
     async def _dispatch(self, post_id: str, msg: Message) -> None:
         """Route an inbox message to the agent, unless the workflow says to
-        swallow it (e.g. individual results at the aggregate post)."""
+        swallow it (e.g. individual results at the aggregate post).
+
+        Busy posts get their message requeued (not dropped); vacant posts
+        (革职后空缺) are skipped and audited — a dismissed agent never runs.
+        """
         if not self.engine.should_run(post_id, msg.type):
             return
-        await self._run_agent(post_id, msg)
+        if not self.bus.engine.post_active(post_id):
+            self.bus.storage.insert_event(
+                "agent_skipped", post_id,
+                {"reason": "post vacant (职权中止)", "msg_type": msg.type, "frm": msg.frm},
+            )
+            return
+        if post_id in self._running:
+            await self.bus.requeue(post_id, msg)
+            return
+        self._running.add(post_id)
+        task = asyncio.create_task(self._run_agent(post_id, msg))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     # ── agent execution ────────────────────────────────────
     async def _run_agent(self, post_id: str, msg: Message) -> None:
-        if post_id in self._running:
-            return  # single-flight: skip while busy (message stays queued)
-        self._running.add(post_id)
         try:
             loop = self.loop_factory(post_id)
             # wire the bus audit trail into the agent's tool executions
@@ -105,6 +122,11 @@ class AgentScheduler:
                 )
                 return
             await self.engine.on_agent_done(post_id, msg, result)
+        except Exception as e:  # noqa: BLE001 — a crashing agent must not kill the pump
+            self.bus.storage.insert_event(
+                "agent_error", post_id,
+                {"error": str(e), "msg_type": msg.type, "frm": msg.frm},
+            )
         finally:
             self._running.discard(post_id)
 
@@ -117,7 +139,17 @@ class AgentScheduler:
 
     # ── pump ───────────────────────────────────────────────
     async def pump_once(self) -> None:
-        await self.bus.pump_once()
+        """Pump until quiescent: deliver → await the agent runs started
+        during delivery → repeat while new messages arrived. Different
+        posts' agents run concurrently; callers (tests) keep synchronous,
+        whole-cascade semantics."""
+        while True:
+            await self.bus.pump_once()
+            pending = [t for t in self._pending if not t.done()]
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if not self.bus.has_queued_messages():
+                break
 
     async def pump(self) -> None:
         while True:

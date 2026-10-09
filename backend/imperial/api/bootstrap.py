@@ -123,7 +123,12 @@ def build_context(
 ) -> AppContext:
     storage = Storage(db_path or _default_db())
     institution = load_institution(institution_path or DEFAULT_INSTITUTION)
-    engine = RuleEngine(institution)
+
+    def _post_status(post_id: str) -> str | None:
+        row = storage.query_one("SELECT status FROM posts WHERE id = ?", (post_id,))
+        return row["status"] if row else None
+
+    engine = RuleEngine(institution, post_status=_post_status)
     bus = Bus(institution, storage, engine)
     personas = PersonaService(storage, llm=_make_llm() if _llm_available() else None)
     appointments = AppointmentService(

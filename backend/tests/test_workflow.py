@@ -153,11 +153,8 @@ async def test_full_sansheng_flow(sl_world):
     form = EdictForm(title="整理财政", task_type="finance", description="盘点", target="libu")
     await sl_world["edicts"].issue(form)
 
-    # pump 1: draft → review → dispatch → execute (results queue at 尚书省)
-    await sl_world["scheduler"].pump_once()
-    assert sl_world["memorials"].list() == []
-
-    # pump 2: 尚书省 receives aggregate → summarizes → ONE memorial
+    # pump_until_quiescent: the whole cascade (draft → review → dispatch →
+    # execute → aggregate → memorial) completes in ONE pump call
     await sl_world["scheduler"].pump_once()
     memorials = sl_world["memorials"].list()
     assert len(memorials) == 1
