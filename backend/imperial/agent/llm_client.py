@@ -8,10 +8,12 @@ can slot in later without touching agent code.
 from __future__ import annotations
 
 import os
+import random
+import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 ApiStyle = Literal["chat", "responses"]
 
@@ -34,7 +36,21 @@ class LLMResponse:
 
 
 class LLMError(RuntimeError):
-    pass
+    """Domain error for LLM failures. `retryable` marks transient faults
+    (rate limit / timeout / connection / 5xx) that backoff may fix."""
+
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Classify OpenAI SDK errors: transient vs permanent."""
+    if isinstance(exc, (RateLimitError, APITimeoutError, APIConnectionError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code >= 500
+    return False
 
 
 class LLMClient:
@@ -49,6 +65,9 @@ class LLMClient:
         api_style: ApiStyle = "chat",
         max_tokens: int = 4096,
         temperature: float = 0.3,
+        max_retries: int | None = None,
+        base_delay: float = 1.0,
+        max_delay: float = 20.0,
     ):
         self.model = model or os.environ.get("IMPERIAL_LLM_MODEL", "deepseek-chat")
         base = base_url or os.environ.get("IMPERIAL_LLM_BASE_URL") or "https://api.deepseek.com"
@@ -58,6 +77,11 @@ class LLMClient:
         self.api_style = api_style
         self.max_tokens = max_tokens
         self.temperature = temperature
+        if max_retries is None:
+            max_retries = int(os.environ.get("IMPERIAL_LLM_MAX_RETRIES", "3"))
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+        self.max_delay = max_delay
         self._client = OpenAI(base_url=base, api_key=key)
 
     # ── public interface ───────────────────────────────────
@@ -68,11 +92,22 @@ class LLMClient:
         *,
         model: str | None = None,
     ) -> LLMResponse:
-        """Run one LLM turn. Returns normalized response with tool calls."""
+        """Run one LLM turn, retrying transient failures with exponential
+        backoff + jitter. Permanent errors (auth, bad request) raise at once;
+        transient errors raise after max_retries is exhausted."""
         use_model = model or self.model
-        if self.api_style == "chat":
-            return self._complete_chat(messages, tools, use_model)
-        return self._complete_responses(messages, tools, use_model)
+        attempt = 0
+        while True:
+            try:
+                if self.api_style == "chat":
+                    return self._complete_chat(messages, tools, use_model)
+                return self._complete_responses(messages, tools, use_model)
+            except LLMError as e:
+                if not e.retryable or attempt >= self.max_retries:
+                    raise
+                delay = min(self.max_delay, self.base_delay * (2**attempt))
+                time.sleep(delay + random.uniform(0, 0.5))
+                attempt += 1
 
     # ── chat completions (DeepSeek current) ────────────────
     def _complete_chat(
@@ -92,7 +127,7 @@ class LLMClient:
         try:
             resp = self._client.chat.completions.create(**kwargs)
         except Exception as e:  # noqa: BLE001 — surface as domain error
-            raise LLMError(f"LLM call failed: {e}") from e
+            raise LLMError(f"LLM call failed: {e}", retryable=_is_retryable(e)) from e
 
         choice = resp.choices[0]
         msg = choice.message
@@ -126,7 +161,7 @@ class LLMClient:
         try:
             resp = self._client.responses.create(**kwargs)
         except Exception as e:  # noqa: BLE001
-            raise LLMError(f"LLM call failed: {e}") from e
+            raise LLMError(f"LLM call failed: {e}", retryable=_is_retryable(e)) from e
 
         tool_calls: list[LLMToolCall] = []
         text_parts: list[str] = []

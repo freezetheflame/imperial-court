@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from imperial.agent.llm_client import LLMError
 from imperial.agent.loop import AgentLoop
 from imperial.agent.prompts import build_system_prompt
 from imperial.bus import Bus, Message
@@ -92,7 +93,17 @@ class AgentScheduler:
             if loop.auditor is None:
                 loop.auditor = lambda p, t, a, r, **kw: self.bus.audit_tool_call(p, t, a, r)
             task = self._render_task(msg)
-            result = await loop.run(post_id, self._system_prompts[post_id], task)
+            try:
+                result = await loop.run(post_id, self._system_prompts[post_id], task)
+            except LLMError as e:
+                # degraded: LLM retries exhausted — audit and skip routing so
+                # a failure string never becomes a memorial; the message is
+                # consumed, but inquire_progress can re-urge the workflow.
+                self.bus.storage.insert_event(
+                    "llm_failure", post_id,
+                    {"error": str(e), "msg_type": msg.type, "frm": msg.frm},
+                )
+                return
             await self.engine.on_agent_done(post_id, msg, result)
         finally:
             self._running.discard(post_id)
