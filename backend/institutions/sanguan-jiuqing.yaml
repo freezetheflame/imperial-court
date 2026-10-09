@@ -18,8 +18,7 @@ institution:
       tool_allowance:
         - decompose_task      # 拆解上谕为子任务
         - dispatch_task       # 分派任务给执行岗
-        - inquire_progress    # 催办
-        - summarize           # 汇总结果上奏
+        - inquire_progress    # 催办：查进度并向未完岗发催办
         - query_events        # 查事件流（了解全局）
       model: deepseek-v4-flash  # 丞相用 pro（发布后改 deepseek-v4-pro）
 

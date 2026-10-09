@@ -34,6 +34,7 @@ institution:
       reports_to: emperor
       tool_allowance:
         - dispatch_task       # 分派给六部
+        - inquire_progress    # 催办：查进度并向未完岗发催办
         - query_events
 
     # 六部

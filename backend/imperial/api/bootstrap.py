@@ -17,7 +17,7 @@ from imperial.agent.llm_client import LLMClient, LLMError
 from imperial.agent.loop import AgentLoop
 from imperial.agent.persona import PersonaService
 from imperial.agent.scheduler import AgentScheduler
-from imperial.agent.tools import build_tools
+from imperial.agent.tools import build_tools, validate_tool_allowances
 from imperial.agent.tracker import TaskTracker
 from imperial.bus import Bus
 from imperial.court.appointments import AppointmentService
@@ -144,6 +144,12 @@ def build_context(
         bus=bus, storage=storage, memorials=memorials, appointments=appointments,
         tracker=tracker, engine=workflow,
     )
+    # fail fast if the institution YAML whitelists tools that don't exist
+    allowance_violations = validate_tool_allowances(institution, tools)
+    if allowance_violations:
+        raise ValueError(
+            "制度白名单与工具注册表不一致：\n" + "\n".join(allowance_violations)
+        )
 
     if seed_posts:
         _seed_posts(storage, institution)

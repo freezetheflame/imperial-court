@@ -89,6 +89,41 @@ def build_tools(
             "reason": decision.reason if decision is not None else None,
         }
 
+    @reg.register(
+        "inquire_progress",
+        "催办：查询某道上谕的子任务进度，并向未完成岗位发催办消息",
+        {
+            "type": "object",
+            "properties": {"edict_id": STR_PROP},
+            "required": ["edict_id"],
+        },
+    )
+    async def inquire_progress(edict_id: str, _post_id: str | None = None) -> dict[str, Any]:
+        prog = tracker.progress(edict_id)
+        if prog is None:
+            return {"edict_id": edict_id, "found": False, "pending": [], "urged": []}
+        pending = [(k, s) for k, s in prog.subtasks.items() if not s.completed]
+        frm = _post_id or engine.dispatch_post()
+        urged: list[dict[str, Any]] = []
+        for _key, sub in pending:
+            ok, decision = await bus.post_message(
+                frm, sub.target, "inquiry",
+                payload={"edict_id": edict_id, "title": sub.title},
+            )
+            urged.append({
+                "target": sub.target,
+                "sent": ok,
+                "reason": decision.reason if decision is not None else None,
+            })
+        return {
+            "edict_id": edict_id,
+            "found": True,
+            "total": prog.total,
+            "done": prog.done,
+            "pending": [s.title for _k, s in pending],
+            "urged": urged,
+        }
+
     # ── executor tools ─────────────────────────────────────
     @reg.register(
         "run_task",
@@ -112,8 +147,11 @@ def build_tools(
         },
     )
     async def report_result(edict_id: str, summary: str, detail: str | None = None, _post_id: str | None = None) -> dict[str, Any]:
-        # _post_id injected by AgentLoop from the post's identity
-        frm = _post_id or "finance"
+        # _post_id injected by AgentLoop from the post's identity; without it
+        # we cannot know the sender — refuse rather than guess a post id.
+        if not _post_id:
+            return {"reported": False, "reason": "缺少岗位身份（_post_id 未注入）"}
+        frm = _post_id
         report_to = engine.report_target()
         ok, decision = await bus.post_message(
             frm, report_to, "result",
@@ -270,3 +308,21 @@ def build_tools(
         return {"post_id": post_id, "reason": reason, "recommended": True}
 
     return reg
+
+
+def validate_tool_allowances(institution: Any, reg: ToolRegistry) -> list[str]:
+    """Check every post's tool_allowance only names registered tools.
+
+    Returns a list of human-readable violations (empty when consistent).
+    Called at bootstrap so an institution YAML that drifts from the tool
+    registry fails fast instead of producing 'unknown tool' rejections at
+    runtime.
+    """
+    violations: list[str] = []
+    for post in institution.posts:
+        for tool_name in post.tool_allowance:
+            if not reg.has(tool_name):
+                violations.append(
+                    f"岗位 {post.id}（{post.title}）白名单包含未注册工具: {tool_name}"
+                )
+    return violations
