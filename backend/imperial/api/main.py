@@ -5,6 +5,7 @@ Run:  uvicorn imperial.api.main:app --reload
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,28 @@ from imperial.api.bootstrap import AppContext, build_context
 from imperial.api.env import load_env
 from imperial.api.events import EventBroadcaster
 from imperial.api import routes
+
+
+def _resolve_institution(backend_root: Path) -> Path:
+    """Institution YAML: $IMPERIAL_INSTITUTION (id or path), else 三公九卿.
+
+    Accepts either a bare institution id ("sansheng-liubu") resolved against
+    backend/institutions/, or a full/relative YAML path.
+    """
+    env = os.environ.get("IMPERIAL_INSTITUTION")
+    institutions_dir = backend_root / "institutions"
+    if not env:
+        return institutions_dir / "sanguan-jiuqing.yaml"
+    candidate = Path(env)
+    if candidate.is_file():
+        return candidate
+    named = institutions_dir / (env if env.endswith(".yaml") else f"{env}.yaml")
+    if named.is_file():
+        return named
+    raise FileNotFoundError(
+        f"IMPERIAL_INSTITUTION={env!r} 既不是存在的文件路径，"
+        f"也不是 {institutions_dir} 下的制度 id"
+    )
 
 
 def create_app(
@@ -31,7 +54,7 @@ def create_app(
     backend_root = Path(__file__).resolve().parent.parent.parent  # backend/
     ctx = build_context(
         db_path=db_path,
-        institution_path=institution_path or backend_root / "institutions" / "sanguan-jiuqing.yaml",
+        institution_path=institution_path or _resolve_institution(backend_root),
         seed_posts=seed_posts,
         enable_scheduler=enable_scheduler,
     )

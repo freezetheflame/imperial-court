@@ -184,3 +184,33 @@ def test_edict_progress_endpoint(client):
 def test_edict_progress_404(client):
     r = client.get("/api/edicts/nonexistent/progress")
     assert r.status_code == 404
+
+
+# ── institution switching via env ──────────────────────────
+def test_resolve_institution_defaults_to_sanguan(monkeypatch, tmp_path):
+    from imperial.api.main import _resolve_institution
+
+    monkeypatch.delenv("IMPERIAL_INSTITUTION", raising=False)
+    assert _resolve_institution(tmp_path).name == "sanguan-jiuqing.yaml"
+
+
+def test_resolve_institution_by_id(monkeypatch):
+    from pathlib import Path
+
+    from imperial.api.main import _resolve_institution
+
+    monkeypatch.setenv("IMPERIAL_INSTITUTION", "sansheng-liubu")
+    backend_root = Path(__file__).resolve().parent.parent
+    resolved = _resolve_institution(backend_root)
+    assert resolved.name == "sansheng-liubu.yaml"
+    assert resolved.is_file()
+
+
+def test_resolve_institution_bad_value_raises(monkeypatch, tmp_path):
+    import pytest
+
+    from imperial.api.main import _resolve_institution
+
+    monkeypatch.setenv("IMPERIAL_INSTITUTION", "no-such-dynasty")
+    with pytest.raises(FileNotFoundError):
+        _resolve_institution(tmp_path)
