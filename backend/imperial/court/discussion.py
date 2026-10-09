@@ -84,7 +84,11 @@ class CourtRoomService:
         self.storage.insert_event("court_thread_open", opened_by, {"thread_id": tid, "topic": topic})
         thread = self.get_thread(tid)
         await self._emit("court", {"kind": "thread_open", "thread": thread})
-        return thread  # type: ignore[return-value]
+        # 开议即广播：议题本身就是开场发言——落库 + fan-out 给全体参与者。
+        # 否则议题只是躺在库里，百官无人知晓，讨论永远不会自启动。
+        # 这一轮同样计入熔断预算。
+        await self.speak(thread_id=tid, frm=opened_by, content=topic)
+        return self.get_thread(tid)  # type: ignore[return-value]
 
     async def close_thread(self, thread_id: str, *, reason: str = "闭议") -> dict[str, Any]:
         thread = self._require_thread(thread_id)
@@ -162,8 +166,10 @@ class CourtRoomService:
             "SELECT * FROM court_threads ORDER BY created_at DESC LIMIT ?", (limit,),
         )
         for t in threads:
+            # rowid（插入顺序）而非 created_at：同一秒内的多条发言时间戳相同，
+            # 按时间排序会乱序（随机 uuid id 也不保序）
             last = self.storage.query_one(
-                "SELECT frm, content, created_at FROM court_messages WHERE thread_id = ? ORDER BY created_at DESC LIMIT 1",
+                "SELECT frm, content, created_at FROM court_messages WHERE thread_id = ? ORDER BY rowid DESC LIMIT 1",
                 (t["id"],),
             )
             t["last_message"] = last
@@ -176,7 +182,7 @@ class CourtRoomService:
         if thread is None:
             return None
         thread["messages"] = self.storage.query(
-            "SELECT * FROM court_messages WHERE thread_id = ? ORDER BY created_at ASC, id ASC",
+            "SELECT * FROM court_messages WHERE thread_id = ? ORDER BY rowid ASC",
             (thread_id,),
         )
         return thread

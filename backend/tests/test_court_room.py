@@ -17,21 +17,30 @@ def room(institution, storage):
 
 
 # ── service behavior ─────────────────────────────────────
-async def test_open_and_speak_persists(room):
-    svc = room["service"]
+async def test_open_thread_broadcasts_topic_and_speak_persists(room):
+    """开议即广播：议题本身是第 1 轮发言，落库并 fan-out 给全体参与者。"""
+    svc, bus = room["service"], room["bus"]
+    for pid in ("justice", "censor"):
+        await bus.subscribe(pid, lambda m: None)  # type: ignore[misc]
+
     thread = await svc.open_thread(topic="是否加征盐铁税", opened_by="emperor")
     assert thread["id"].startswith("ct_")
     assert thread["status"] == "open"
+    # 开议广播：议题作为开场发言入册，并计入熔断预算
+    assert thread["turns"] == 1
+    assert thread["messages"][0]["frm"] == "emperor"
+    assert thread["messages"][0]["content"] == "是否加征盐铁税"
+    assert bus._inboxes["justice"].qsize() == 1  # 百官已被惊动
 
     msg = await svc.speak(thread_id=thread["id"], frm="finance", content="臣以为不可，民力已竭。")
     assert msg["delivered"] is True
-    assert msg["turn"] == 1
+    assert msg["turn"] == 2
 
     full = svc.get_thread(thread["id"])
     assert full is not None
-    assert len(full["messages"]) == 1
-    assert full["messages"][0]["frm"] == "finance"
-    assert full["turns"] == 1
+    assert len(full["messages"]) == 2
+    assert full["messages"][1]["frm"] == "finance"
+    assert full["turns"] == 2
 
 
 async def test_speak_fans_out_to_participants_except_speaker(room):
@@ -45,13 +54,19 @@ async def test_speak_fans_out_to_participants_except_speaker(room):
     await svc.speak(thread_id=thread["id"], frm="grand_commandant", content="北疆骑兵需添马三千。")
 
     # raw fan-out already queued the copies (no pump needed for queue arrival)
-    assert bus._inboxes["justice"].qsize() == 1
-    assert bus._inboxes["censor"].qsize() == 1
+    # 开议广播(1) + 发言(1) = 2
+    assert bus._inboxes["justice"].qsize() == 2
+    assert bus._inboxes["censor"].qsize() == 2
     # speaker does NOT receive their own speech
     assert bus._inboxes.get("grand_commandant") is None or bus._inboxes["grand_commandant"].qsize() == 0
+    opening = bus._inboxes["justice"].get_nowait()
+    assert opening.type == "discuss"
+    assert opening.payload["topic"] == "军备整饬"
+    assert opening.payload["content"] == "军备整饬"  # 开场发言即议题
+    assert opening.payload["speaker"] == "grand_commandant"
     msg = bus._inboxes["justice"].get_nowait()
     assert msg.type == "discuss"
-    assert msg.payload["topic"] == "军备整饬"
+    assert msg.payload["content"] == "北疆骑兵需添马三千。"
     assert msg.payload["speaker"] == "grand_commandant"
 
 
@@ -68,7 +83,8 @@ async def test_turn_budget_fuse_closes_thread(room):
     svc = room["service"]
     assert svc.max_turns == 24  # from sanguan-jiuqing.yaml
     thread = await svc.open_thread(topic="持久战议题", opened_by="emperor")
-    for i in range(24):
+    # 开议广播已占 1 轮，故再发 23 轮即触顶（共 24 轮）
+    for i in range(23):
         msg = await svc.speak(thread_id=thread["id"], frm="chancery", content=f"第{i + 1}轮。")
     assert msg["thread_closed"] is True
     closed = svc.get_thread(thread["id"])
@@ -182,6 +198,7 @@ def test_api_court_room_flow(client):
     assert r.status_code == 201
     thread = r.json()
     assert thread["opened_by"] == "emperor"
+    assert thread["turns"] == 1  # 开议即广播，议题本身已作为开场发言入册
 
     r = client.post(f"/api/court/threads/{thread['id']}/speak", json={"content": "众卿以为如何？"})
     assert r.status_code == 200
@@ -190,7 +207,9 @@ def test_api_court_room_flow(client):
     r = client.get(f"/api/court/threads/{thread['id']}")
     assert r.status_code == 200
     msgs = r.json()["messages"]
-    assert len(msgs) == 1 and msgs[0]["frm"] == "emperor"
+    assert len(msgs) == 2
+    assert [m["frm"] for m in msgs] == ["emperor", "emperor"]
+    assert msgs[0]["content"] == "边关军粮调配"
 
     # unknown thread → 404
     assert client.get("/api/court/threads/ct_nope").status_code == 404
