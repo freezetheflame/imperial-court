@@ -12,3 +12,7 @@ frontend/.vite/
 backend/.env
 .env
 *.env
+
+# WorkBuddy 工作区数据（记忆/日志，非项目源码）
+.workbuddy/
+backend/imperial_court.egg-info/
